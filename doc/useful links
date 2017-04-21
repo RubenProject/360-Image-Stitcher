@@ -1,0 +1,17 @@
+compile command:
+g++ `pkg-config --cflags opencv' source.cpp 'pkg-config --libs opencv` -o output
+
+
+
+
+http://opencv.org/
+
+http://docs.opencv.org/master/
+
+http://docs.opencv.org/master/d9/df8/tutorial_root.html
+
+http://docs.opencv.org/master/de/d7a/tutorial_table_of_content_core.html
+
+http://docs.opencv.org/master/d0/d33/tutorial_table_of_content_stitching.html
+
+http://docs.opencv.org/master/d2/d64/tutorial_table_of_content_objdetect.html
