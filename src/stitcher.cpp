@@ -75,10 +75,7 @@ void ImgToSquare(const Mat& Img ,Mat& Res)
     {
         for(int i= 1;i < (Img.cols/2)-1; ++i)
         {
-            for(int k = 0; k < nChannels; ++k)
-            {
-                Res.at<Vec3b>(j, i)[k] = Img.at<Vec3b>(j, i)[k];
-            }
+            Res.at<Vec3b>(j, i) = Img.at<Vec3b>(j, i);
         }
     }
   //! [basic_method_loop]
