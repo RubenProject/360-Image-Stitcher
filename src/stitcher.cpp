@@ -73,26 +73,26 @@ void ellipticalSquareToDisc(double x, double y, double& u, double& v)
 }
 
 
-void ImgToSquare(const Mat& Img ,Mat& Res, int col)
+void ImgToSquare(const Mat& Img ,Mat& Res)
 {
     double x, y, u, v;
     double r = Img.rows / 2;
-    cout << col << endl;
+
     CV_Assert(Img.depth() == CV_8U);  // accept only uchar images
 
-    Res.create(Img.rows, Img.cols / 2, Img.type());
+    Res.create(Img.rows, Img.cols, Img.type());
 
 
     //copy image to square, transform coords  
-    for(int j = 0; j < Img.cols / 2; ++j)
+    for(int j = 0; j < Img.cols; ++j)
     {
         for(int i= 0;i < Img.rows; ++i)
         {
             u = (i - r) / r;
             v = (j - r) / r;
             ellipticalSquareToDisc(u, v, x, y);
-            x = x * r + r + col;
-            y = y * r + r + col;
+            x = x * r + r;
+            y = y * r + r;
             if (x > 0 && x < Img.cols 
              && y > 0 && y < Img.rows){           
                 Res.at<Vec3b>(j, i) = Img.at<Vec3b>((int)y, (int)x);
@@ -119,18 +119,25 @@ int main( int argc, char* argv[])
         return -1;
     }
 
-    namedWindow("i0", WINDOW_NORMAL);
+    //namedWindow("i0", WINDOW_NORMAL);
+    //namedWindow("i1", WINDOW_NORMAL);
     namedWindow("o0", WINDOW_NORMAL);
     namedWindow("o1", WINDOW_NORMAL);
-    resizeWindow("i0", 600, 300);
+    //resizeWindow("i0", 600, 600);
+    //resizeWindow("i1", 600, 600);
     resizeWindow("o0", 600, 600);
     resizeWindow("o1", 600, 600);
-    imshow("i0", src);
+    
+    Mat cut0 = src(Rect(0, 0, src.rows, src.cols/2));
+    Mat cut1 = src(Rect(src.cols/2, 0, src.rows, src.cols/2));
+
+    //imshow("i0", cut0);
+    //imshow("i1", cut1);
 
     double t = (double)getTickCount();
 
-    ImgToSquare(src, dst0, 0);
-    ImgToSquare(src, dst1, src.cols/2);
+    ImgToSquare(cut0, dst0);
+    ImgToSquare(cut1, dst1);
 
     t = ((double)getTickCount() - t)/getTickFrequency();
     cout << "Hand written function times passed in seconds: " << t << endl;
@@ -139,11 +146,6 @@ int main( int argc, char* argv[])
     imshow( "o1", dst1 );
     waitKey();
 
-  //![kern]
-    Mat kernel = (Mat_<char>(3,3) <<  0, -1,  0,
-                                   -1,  5, -1,
-                                    0, -1,  0);
-  //![kern]
 
     return 0;
 }
