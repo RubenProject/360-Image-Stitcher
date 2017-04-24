@@ -63,7 +63,11 @@ void stretchSquareToDisc(float x, float y, float& u, float& v)
     v = y * multiplier;
 }
 
-
+void equirectangularSquareToDisc(double x, double y, double& u, double& v)
+{
+   u = x * cos(0.5);
+   v = (y - 0.5);
+}
 
 
 void ellipticalSquareToDisc(double x, double y, double& u, double& v)
@@ -90,7 +94,7 @@ void ImgToSquare(const Mat& Img ,Mat& Res)
         {
             u = (i - r) / r;
             v = (j - r) / r;
-            ellipticalSquareToDisc(u, v, x, y);
+            equirectangularSquareToDisc(u, v, x, y);
             x = x * r + r;
             y = y * r + r;
             if (x > 0 && x < Img.cols 
@@ -106,7 +110,7 @@ int main( int argc, char* argv[])
     help(argv[0]);
     const char* filename = argc >=2 ? argv[1] : "../data/lena.jpg";
 
-    Mat src, dst0, dst1;
+    Mat src, dst0, dst1, out;
 
     if (argc >= 3 && !strcmp("G", argv[2]))
         src = imread( filename, IMREAD_GRAYSCALE);
@@ -144,6 +148,10 @@ int main( int argc, char* argv[])
 
     imshow( "o0", dst0 );
     imshow( "o1", dst1 );
+    hconcat(dst0, dst1, out);
+    string outputFileName(filename);
+    outputFileName.append("_NO_STITCH_S.JPG");
+    imwrite(outputFileName, out);
     waitKey();
 
 
