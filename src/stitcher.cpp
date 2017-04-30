@@ -11,20 +11,8 @@ using namespace cv;
 
 
 #define epsilon 0.0000001
+#define PI 3.1415926535897
 
-
-void ellipticalSquareToDisc(double x, double y, double& u, double& v);
-void ImgToSquare(const Mat& myImage,Mat& Result);
-
-
-inline float sgn(float input)
-{
-    float output = 1.0f;
-    if (input < 0.0) {
-        output = -1.0f;
-    }
-    return output;
-}
 
 
 static void help(char* progName)
@@ -37,37 +25,6 @@ static void help(char* progName)
 
 
 
-void stretchSquareToDisc(float x, float y, float& u, float& v)
-{
-    if ( (fabs(x) < epsilon) || (fabs(y) < epsilon))  {
-        u = x;
-        v = y;
-        return;
-    }
-    
-    float x2 = x*x;
-    float y2 = y*y;
-    float hypothenusSquared = x2 + y2;
-
-    float reciprocalHypothenus =  1.0f/sqrt(hypothenusSquared);
-    
-    float multiplier = 1.0f;
-
-    if (x2 > y2) {
-        multiplier = sgn(x) * x * reciprocalHypothenus;
-    } else {
-        multiplier = sgn(y) * y * reciprocalHypothenus;
-    }
-
-    u = x * multiplier;
-    v = y * multiplier;
-}
-
-void equirectangularSquareToDisc(double x, double y, double& u, double& v)
-{
-   u = x * cos(0.5);
-   v = (y - 0.5);
-}
 
 
 void ellipticalSquareToDisc(double x, double y, double& u, double& v)
@@ -77,10 +34,16 @@ void ellipticalSquareToDisc(double x, double y, double& u, double& v)
 }
 
 
-void ImgToSquare(const Mat& Img ,Mat& Res)
+void fishToSquare(const Mat& Img ,Mat& Res)
 {
-    double x, y, u, v;
-    double r = Img.rows / 2;
+    double x, y;
+	float theta,phi,r;
+	double sx, sy, sz;
+
+	float FOV = PI * 1.00; // FOV of the fisheye, eg: 180 degrees
+	float width = Img.cols;
+	float height = Img.rows;
+
 
     CV_Assert(Img.depth() == CV_8U);  // accept only uchar images
 
@@ -88,15 +51,29 @@ void ImgToSquare(const Mat& Img ,Mat& Res)
 
 
     //copy image to square, transform coords  
-    for(int j = 0; j < Img.cols; ++j)
+    for(int j = 0; j < width; ++j)
     {
-        for(int i= 0;i < Img.rows; ++i)
+        for(int i= 0;i < height; ++i)
         {
-            u = (i - r) / r;
-            v = (j - r) / r;
-            equirectangularSquareToDisc(u, v, x, y);
-            x = x * r + r;
-            y = y * r + r;
+	        // Polar angles, correction made for 1:1 image
+	        theta = PI * (i / width - 0.5); // -pi to pi
+	        phi = PI * (j / height - 0.5);	// -pi/2 to pi/2
+
+	        // Vector in 3D space
+	        sx = cos(phi) * sin(theta);
+	        sy = cos(phi) * cos(theta);
+	        sz = sin(phi);
+	
+	        // Calculate fisheye angle and radius
+	        theta = atan2(sz, sx);
+	        phi = atan2(sqrt(sx * sx + sz * sz), sy);
+	        r = width * phi / FOV; 
+
+	        // Pixel in fisheye space
+	        x = 0.5 * width + r * cos(theta);
+	        y = 0.5 * width + r * sin(theta);
+
+            // Set pixel
             if (x > 0 && x < Img.cols 
              && y > 0 && y < Img.rows){           
                 Res.at<Vec3b>(j, i) = Img.at<Vec3b>((int)y, (int)x);
@@ -140,8 +117,8 @@ int main( int argc, char* argv[])
 
     double t = (double)getTickCount();
 
-    ImgToSquare(cut0, dst0);
-    ImgToSquare(cut1, dst1);
+    fishToSquare(cut0, dst0);
+    fishToSquare(cut1, dst1);
 
     t = ((double)getTickCount() - t)/getTickFrequency();
     cout << "Hand written function times passed in seconds: " << t << endl;
