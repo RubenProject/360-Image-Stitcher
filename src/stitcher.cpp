@@ -1,13 +1,18 @@
-#include <opencv2/imgcodecs.hpp>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <stdio.h>
+#include <math.h>
+
+#include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
-#include <math.h>
-#include <stdio.h>
-#include <iostream>
-
+#include <opencv2/features2d.hpp>
+#include <opencv2/xfeatures2d.hpp>
 
 using namespace std;
 using namespace cv;
+using namespace cv::xfeatures2d;
 
 
 #define epsilon 0.0000001
@@ -24,14 +29,6 @@ static void help(char* progName)
 }
 
 
-
-
-
-void ellipticalSquareToDisc(double x, double y, double& u, double& v)
-{
-    u = x * sqrt(1.0 - y*y/2.0);
-    v = y * sqrt(1.0 - x*x/2.0);    
-}
 
 
 void fishToSquare(const Mat& Img ,Mat& Res)
@@ -82,6 +79,57 @@ void fishToSquare(const Mat& Img ,Mat& Res)
     }
 }
 
+void extractDescriptors(const Mat imgA, const Mat imgB)
+{
+    Mat imgA_gray, imgB_gray, imgMatch;
+    vector<KeyPoint> keypointsA, keypointsB;
+    Mat descriptorsA, descriptorsB;
+    vector<DMatch> matches;
+
+    //Detector
+    int minHessian = 400;
+    Ptr<SURF> detector = SURF::create(minHessian);
+
+    //Descriptor
+    Ptr<FREAK> extractor = FREAK::create();
+
+    //Matcher
+    Ptr<DescriptorMatcher> matcher = new BFMatcher(NORM_HAMMING, false);
+    
+    //Convert images to grayscale
+    cvtColor(imgA, imgA_gray, CV_BGR2GRAY);
+    cvtColor(imgB, imgB_gray, CV_BGR2GRAY);
+
+    //Detect
+    double t = (double)getTickCount();
+    detector->detect(imgA_gray, keypointsA);
+    detector->detect(imgB_gray, keypointsB);
+    t = ((double)getTickCount() - t)/getTickFrequency();
+    cout << "Feature Points detected in " << t <<" seconds" << endl;
+
+    //Extract
+    t = (double)getTickCount();
+    extractor->compute(imgA_gray, keypointsA, descriptorsA);
+    extractor->compute(imgB_gray, keypointsB, descriptorsB);
+    t = ((double)getTickCount() - t)/getTickFrequency();
+    cout << "Feature Points extracted in " << t <<" seconds" << endl;
+
+    //Match
+    t = (double)getTickCount();
+    matcher->match(descriptorsA, descriptorsB, matches, imgMatch);
+    t = ((double)getTickCount() - t)/getTickFrequency();
+    cout << "Feature Points matched in " << t <<" seconds" << endl;
+   
+    //Display
+    drawMatches(imgA, keypointsA, imgB, keypointsB, matches, imgMatch);
+    namedWindow("matches", WINDOW_NORMAL);
+    resizeWindow("matches", 600, 600);
+    imshow("matches", imgMatch);
+}
+
+
+
+
 int main( int argc, char* argv[])
 {
     help(argv[0]);
@@ -89,10 +137,13 @@ int main( int argc, char* argv[])
 
     Mat src, dst0, dst1, out;
 
-    if (argc >= 3 && !strcmp("G", argv[2]))
+    if (argc >= 3 && !strcmp("G", argv[2])){
+        cout << "gray" << endl;
         src = imread( filename, IMREAD_GRAYSCALE);
-    else
+    } else {
+        cout << "color" << endl;
         src = imread( filename, IMREAD_COLOR);
+    }
 
     if (src.empty())
     {
@@ -100,35 +151,26 @@ int main( int argc, char* argv[])
         return -1;
     }
 
-    //namedWindow("i0", WINDOW_NORMAL);
-    //namedWindow("i1", WINDOW_NORMAL);
-    namedWindow("o0", WINDOW_NORMAL);
-    namedWindow("o1", WINDOW_NORMAL);
-    //resizeWindow("i0", 600, 600);
-    //resizeWindow("i1", 600, 600);
-    resizeWindow("o0", 600, 600);
-    resizeWindow("o1", 600, 600);
-    
     Mat cut0 = src(Rect(0, 0, src.rows, src.cols/2));
     Mat cut1 = src(Rect(src.cols/2, 0, src.rows, src.cols/2));
 
-    //imshow("i0", cut0);
-    //imshow("i1", cut1);
-
     double t = (double)getTickCount();
-
     fishToSquare(cut0, dst0);
     fishToSquare(cut1, dst1);
-
     t = ((double)getTickCount() - t)/getTickFrequency();
-    cout << "Hand written function times passed in seconds: " << t << endl;
+    cout << "Image transformed in " << t <<" seconds" << endl;
+    
+    extractDescriptors(dst0, dst1);
 
-    imshow( "o0", dst0 );
-    imshow( "o1", dst1 );
     hconcat(dst0, dst1, out);
-    string outputFileName(filename);
-    outputFileName.append("_NO_STITCH_S.JPG");
-    imwrite(outputFileName, out);
+    namedWindow("out", WINDOW_NORMAL);
+    resizeWindow("out", 1200, 600);
+    imshow("out", out);
+
+    //string outputFileName(filename);
+    //outputFileName.append("_NO_STITCH_S.JPG");
+    //imwrite(outputFileName, out);
+
     waitKey();
 
 
