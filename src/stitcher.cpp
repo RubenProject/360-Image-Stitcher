@@ -15,7 +15,6 @@ using namespace cv;
 using namespace cv::xfeatures2d;
 
 
-#define epsilon 0.0000001
 #define PI 3.1415926535897
 
 
@@ -37,10 +36,9 @@ void fishToSquare(const Mat& Img ,Mat& Res)
 	float theta,phi,r;
 	double sx, sy, sz;
 
-	float FOV = PI * 1.00; // FOV of the fisheye, eg: 180 degrees
+	float FOV = PI * 0.98; // FOV of the fisheye, eg: 180 degrees
 	float width = Img.cols;
 	float height = Img.rows;
-
 
     CV_Assert(Img.depth() == CV_8U);  // accept only uchar images
 
@@ -71,8 +69,8 @@ void fishToSquare(const Mat& Img ,Mat& Res)
 	        y = 0.5 * width + r * sin(theta);
 
             // Set pixel
-            if (x > 0 && x < Img.cols 
-             && y > 0 && y < Img.rows){           
+            if (x >= 0 && x < Img.cols 
+             && y >= 0 && y < Img.rows){           
                 Res.at<Vec3b>(j, i) = Img.at<Vec3b>((int)y, (int)x);
             }
         }
