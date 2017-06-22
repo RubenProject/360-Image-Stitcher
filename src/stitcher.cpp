@@ -24,34 +24,33 @@ static void help(char* progName)
     cout << endl
         <<  "This program takes input a circular image as input and outputs a square image" << endl
         <<  "Usage:"                                                                        << endl
-        << progName << " [image_name -- default ../data/lena.jpg] [G -- grayscale] "        << endl << endl;
+        << progName << " [image_name -- default ../data/lena.jpg] "        << endl << endl;
 }
 
 
 
-
-void fishToSquare(const Mat& Img ,Mat& Res)
+//transform the fisheye image to a rectangular image
+void fishToSquare(const Mat img, Mat& res)
 {
     double x, y;
 	float theta,phi,r;
 	double sx, sy, sz;
 
-	float FOV = PI * 0.98; // FOV of the fisheye, eg: 180 degrees
-	float width = Img.cols;
-	float height = Img.rows;
+	float width = img.cols;
+	float height = img.rows;
+	float FOV = PI * 1.12; // FOV of the fisheye, eg: 180 degrees
 
-    CV_Assert(Img.depth() == CV_8U);  // accept only uchar images
+    CV_Assert(img.depth() == CV_8U);  // accept only uchar images
 
-    Res.create(Img.rows, Img.cols, Img.type());
-
+    res.create(img.rows, img.cols*2, img.type());
 
     //copy image to square, transform coords  
-    for(int j = 0; j < width; ++j)
+    for(int i = 0; i < res.cols; i++)
     {
-        for(int i= 0;i < height; ++i)
+        for(int j = 0; j < res.rows; j++)
         {
 	        // Polar angles, correction made for 1:1 image
-	        theta = PI * (i / width - 0.5); // -pi to pi
+	        theta = PI * (i / width - 0.5); // -pi/2 to pi/2
 	        phi = PI * (j / height - 0.5);	// -pi/2 to pi/2
 
 	        // Vector in 3D space
@@ -62,20 +61,31 @@ void fishToSquare(const Mat& Img ,Mat& Res)
 	        // Calculate fisheye angle and radius
 	        theta = atan2(sz, sx);
 	        phi = atan2(sqrt(sx * sx + sz * sz), sy);
-	        r = width * phi / FOV; 
+	        r = width  * phi / FOV; 
 
 	        // Pixel in fisheye space
 	        x = 0.5 * width + r * cos(theta);
 	        y = 0.5 * width + r * sin(theta);
 
             // Set pixel
-            if (x >= 0 && x < Img.cols 
-             && y >= 0 && y < Img.rows){           
-                Res.at<Vec3b>(j, i) = Img.at<Vec3b>((int)y, (int)x);
+            if (x >= 0 && x < img.cols 
+             && y >= 0 && y < img.rows){           
+                res.at<Vec3b>(j, i) = img.at<Vec3b>((int)y, (int)x);
             }
         }
     }
 }
+
+
+//corrects the shift present after projection
+void correctShift(Mat& img){
+    Mat res;
+    Mat img_a = img(Rect(img.cols/4*3, 0, img.cols/4, img.rows));
+    Mat img_b = img(Rect(0, 0, img.cols/4*3, img.rows));
+    hconcat(img_a, img_b, res);
+    img = res;
+}
+
 
 void extractDescriptors(const Mat imgA, const Mat imgB)
 {
@@ -126,12 +136,10 @@ void extractDescriptors(const Mat imgA, const Mat imgB)
 }
 
 
-
-
 int main( int argc, char* argv[])
 {
     help(argv[0]);
-    const char* filename = argc >=2 ? argv[1] : "../data/lena.jpg";
+    const char* filename = argc >=2 ? argv[1] : "../img/original/360_0014.JPG";
 
     Mat src, dst0, dst1, out;
 
@@ -155,19 +163,22 @@ int main( int argc, char* argv[])
     double t = (double)getTickCount();
     fishToSquare(cut0, dst0);
     fishToSquare(cut1, dst1);
+
+    correctShift(dst0);
+    correctShift(dst1);
     t = ((double)getTickCount() - t)/getTickFrequency();
     cout << "Image transformed in " << t <<" seconds" << endl;
     
-    extractDescriptors(dst0, dst1);
+    //extractDescriptors(dst0, dst1);
 
     hconcat(dst0, dst1, out);
     namedWindow("out", WINDOW_NORMAL);
     resizeWindow("out", 1200, 600);
     imshow("out", out);
 
-    //string outputFileName(filename);
-    //outputFileName.append("_NO_STITCH_S.JPG");
-    //imwrite(outputFileName, out);
+    string outputFileName(filename);
+    outputFileName.append("test.JPG");
+    imwrite(outputFileName, out);
 
     waitKey();
 
