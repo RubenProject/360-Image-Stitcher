@@ -10,12 +10,108 @@
 #include <opencv2/features2d.hpp>
 #include <opencv2/xfeatures2d.hpp>
 
+#include <cuda_runtime_api.h>
+#include <cuda.h>
+
 using namespace std;
 using namespace cv;
 using namespace cv::xfeatures2d;
 
 
+#define BLOCK_SIZE 16
 #define PI 3.1415926535897
+
+typedef struct {
+    int width;
+    int height;
+    float* elements;
+} Matrix;
+
+
+__global__
+void ftos (Matrix X, Matrix Y, float FOV){
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
+    int j = blockDim.y * blockIdx.y + threadIdx.y;
+
+    double sx, sy, sz;
+    float theta, phi, r;
+
+    theta = PI * (i / width - 0.5); // -pi/2 to pi/2
+    phi = PI * (j / height - 0.5);	// -pi/2 to pi/2
+
+    // Vector in 3D space
+    sx = cos(phi) * sin(theta);
+    sy = cos(phi) * cos(theta);
+    sz = sin(phi);
+
+    // Calculate fisheye angle and radius
+    theta = atan2(sz, sx);
+    phi = atan2(sqrt(sx * sx + sz * sz), sy);
+    r = width  * phi / FOV; 
+
+    // Pixel in fisheye space
+    X.elements[j * X.width + i] = 0.5 * width + r * cos(theta);
+    Y.elements[j * Y.width + i] = 0.5 * width + r * sin(theta);
+}
+
+
+void cuda_fishToSquare(const Mat img, Mat& res){
+    Matrix X, Y;
+    size_t size;
+    
+    CV_Assert(img.depth() == CV_8U);
+    res.create(img.rows, img.cols*2, img.type());
+   
+    float FOV = PI * 1.12;
+
+    //Allocate X in device memory
+    Matrix d_X;
+    d_X.width = res.cols;
+    d_X.height = res.rows;
+    size = res.cols * res.rows * sizeof(float);
+    cudaMalloc(&d_X.elements, size);
+
+    //Allocate Y in device memory
+    Matrix d_Y;
+    d_Y.width = res.cols;
+    d_Y.height = res.rows;
+    size = res.cols * res.rows * sizeof(float);
+    cudaMalloc(&d_Y.elements, size);
+
+
+    // Invoke kernel
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    dim3 dimGrid(res.cols / dimBlock.x, res.rows / dimBlock.y);
+    ftos<<<dimGrid, dimBlock>>>(d_X, d_Y, FOV);
+    
+    //Read X from device memory
+    cudaMemcpy(d_X.elements, X.elements, size, cudaMemcpyDeviceToHost);
+
+    //Read Y from device memory
+    cudaMemcpy(d_Y.elements, Y.elements, size, cudaMemcpyDeviceToHost);
+
+    //Free device memory
+    cudaFree(d_X.elements);
+    cudaFree(d_Y.elements);
+
+    int x, y;
+
+    for(int i = 0; i < res.cols; i++){
+        for(int j = 0; j < res.rows; j++){
+            
+            //read coordinates
+            x = X.elements[j * X.width + i];
+            y = Y.elements[j * X.width + i];
+
+            // Set pixel
+            if (x >= 0 && x < img.cols 
+             && y >= 0 && y < img.rows){           
+                res.at<Vec3b>(j, i) = img.at<Vec3b>((int)y, (int)x);
+            }
+        }
+    }
+
+}
 
 
 

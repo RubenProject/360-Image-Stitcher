@@ -1,4 +1,4 @@
-CXX ?= g++
+CXX ?= nvcc
 
 CXXFLAGS += -c -Wall $(shell pkg-config --cflags opencv)
 LDFLAGS += $(shell pkg-config --libs --static opencv)
