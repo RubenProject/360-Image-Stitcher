@@ -1,6 +1,7 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <thread>
 #include <stdio.h>
 #include <math.h>
 
@@ -15,6 +16,7 @@ using namespace cv;
 using namespace cv::xfeatures2d;
 
 
+#define THREAD_COUNT 12
 #define PI 3.1415926535897
 
 
@@ -28,9 +30,8 @@ static void help(char* progName)
 }
 
 
-
 //transform the fisheye image to a rectangular image
-void fishToSquare(const Mat img, Mat& res)
+void fishToSquare(const Mat img, Mat& res, int start, int end)
 {
     double x, y;
 	float theta,phi,r;
@@ -42,10 +43,10 @@ void fishToSquare(const Mat img, Mat& res)
 
     CV_Assert(img.depth() == CV_8U);  // accept only uchar images
 
-    res.create(img.rows, img.cols*2, img.type());
+    res.create(img.rows, end - start, img.type());
 
     //copy image to square, transform coords  
-    for(int i = 0; i < res.cols; i++)
+    for(int i = start; i < end; i++)
     {
         for(int j = 0; j < res.rows; j++)
         {
@@ -70,12 +71,39 @@ void fishToSquare(const Mat img, Mat& res)
             // Set pixel
             if (x >= 0 && x < img.cols 
              && y >= 0 && y < img.rows){           
-                res.at<Vec3b>(j, i) = img.at<Vec3b>((int)y, (int)x);
+                res.at<Vec3b>(j, i - start) = img.at<Vec3b>((int)y, (int)x);
+            }else {
+                
+
+                res.at<Vec3b>(j, i - start) = Vec3b(0,0,0);
             }
         }
     }
 }
 
+
+void fishToSquare_threaded(const Mat img, Mat& res){
+    Mat p_res[THREAD_COUNT];
+    thread t[THREAD_COUNT];
+    Mat temp;
+    
+    int width = img.cols;
+
+    int start, end;
+
+    //divide work over threads
+    for (int i = 0; i < THREAD_COUNT; i++){
+        start = i * width * 2 / THREAD_COUNT;
+        end = (i + 1) * width * 2 / THREAD_COUNT;
+        t[i] = thread(fishToSquare, img, ref(p_res[i]), start, end);
+    }
+
+    //join all partial solutions
+    for (int i = 0; i < THREAD_COUNT; i++){
+        t[i].join();
+    }
+    hconcat(p_res, THREAD_COUNT, res);
+}
 
 //corrects the shift present after projection
 void correctShift(Mat& img){
@@ -161,8 +189,11 @@ int main( int argc, char* argv[])
     Mat cut1 = src(Rect(src.cols/2, 0, src.rows, src.cols/2));
 
     double t = (double)getTickCount();
-    fishToSquare(cut0, dst0);
-    fishToSquare(cut1, dst1);
+    fishToSquare_threaded(cut0, dst0);
+    fishToSquare_threaded(cut1, dst1);
+
+    //fishToSquare(cut0, dst0, 0, cut0.cols*2);
+    //fishToSquare(cut1, dst1, 0, cut1.cols*2);
 
     correctShift(dst0);
     correctShift(dst1);

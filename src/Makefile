@@ -1,6 +1,6 @@
 CXX ?= g++
 
-CXXFLAGS += -c -Wall $(shell pkg-config --cflags opencv)
+CXXFLAGS += -c -Wall -std=c++11 $(shell pkg-config --cflags opencv)
 LDFLAGS += $(shell pkg-config --libs --static opencv)
 
 all: stitcher
