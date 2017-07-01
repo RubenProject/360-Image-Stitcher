@@ -16,6 +16,8 @@ using namespace cv;
 using namespace cv::xfeatures2d;
 
 
+#define OVERLAP_FACTOR 0.545
+#define FOV_FACTOR 1.08
 #define THREAD_COUNT 12
 #define PI 3.1415926535897
 
@@ -39,7 +41,7 @@ void fishToSquare(const Mat img, Mat& res, int start, int end)
 
 	float width = img.cols;
 	float height = img.rows;
-	float FOV = PI * 1.12; // FOV of the fisheye, eg: 180 degrees
+	float FOV = PI * FOV_FACTOR; // FOV of the fisheye, eg: 180 degrees
 
     CV_Assert(img.depth() == CV_8U);  // accept only uchar images
 
@@ -105,6 +107,7 @@ void fishToSquare_threaded(const Mat img, Mat& res){
     hconcat(p_res, THREAD_COUNT, res);
 }
 
+
 //corrects the shift present after projection
 void correctShift(Mat& img){
     Mat res;
@@ -164,10 +167,40 @@ void extractDescriptors(const Mat imgA, const Mat imgB)
 }
 
 
+void bundleAdjustment(Mat& src){
+    Mat res;
+    float adjfact = 0.96;
+    float update = (1 - adjfact) / src.rows;
+    float x, y;
+    res.create(src.rows, src.cols, src.type());
+    for (int j = 0; j < res.rows; ++j){
+        for (int i = 0; i < res.cols; ++i){
+            x = i - (src.cols / 2);
+            x *= adjfact;
+            x += src.cols / 2;
+            y = j;
+            res.at<Vec3b>(j, i) = src.at<Vec3b>(y, x);
+        }
+        adjfact += update;
+    }
+    src = res;
+}
+
+
+void joinImgs(Mat in0, Mat in1, Mat& out){
+    int width = in0.cols * OVERLAP_FACTOR;
+    int x = (in0.cols - width) / 2;
+    in0 = in0(Rect(x, 0, width, in0.rows));
+    in1 = in1(Rect(x, 0, width, in1.rows));
+    
+    hconcat(in0, in1, out);
+}
+
+
 int main( int argc, char* argv[])
 {
     help(argv[0]);
-    const char* filename = argc >=2 ? argv[1] : "../img/original/360_0014.JPG";
+    const char* filename = argc >=2 ? argv[1] : "../img/original/360_0026.JPG";
 
     Mat src, dst0, dst1, out;
 
@@ -192,23 +225,28 @@ int main( int argc, char* argv[])
     fishToSquare_threaded(cut0, dst0);
     fishToSquare_threaded(cut1, dst1);
 
-    //fishToSquare(cut0, dst0, 0, cut0.cols*2);
-    //fishToSquare(cut1, dst1, 0, cut1.cols*2);
-
     correctShift(dst0);
     correctShift(dst1);
+
+    bundleAdjustment(dst0);
+    bundleAdjustment(dst1);
     t = ((double)getTickCount() - t)/getTickFrequency();
     cout << "Image transformed in " << t <<" seconds" << endl;
     
-    //extractDescriptors(dst0, dst1);
 
-    hconcat(dst0, dst1, out);
+    extractDescriptors(dst0, dst1);
+    joinImgs(dst0, dst1, out);
+
+
+    //hconcat(dst0, dst1, out);
     namedWindow("out", WINDOW_NORMAL);
     resizeWindow("out", 1200, 600);
     imshow("out", out);
 
     string outputFileName(filename);
-    outputFileName.append("test.JPG");
+    outputFileName = outputFileName.substr(outputFileName.length() - 12);
+    outputFileName = "../img/test/" + outputFileName;
+    cout << "Writing to: " << outputFileName << endl;
     imwrite(outputFileName, out);
 
     waitKey();
