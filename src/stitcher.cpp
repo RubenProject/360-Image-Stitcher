@@ -3,11 +3,15 @@
 #include <iostream>
 #include <thread>
 #include <stdio.h>
+#include <cstdlib>
+#include <ctime>
 #include <math.h>
+#include <climits>
 
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/calib3d.hpp>
 #include <opencv2/features2d.hpp>
 #include <opencv2/xfeatures2d.hpp>
 
@@ -118,12 +122,11 @@ void correctShift(Mat& img){
 }
 
 
-void extractDescriptors(const Mat imgA, const Mat imgB)
+void extractDescriptors(const Mat imgA, const Mat imgB, vector<KeyPoint>& keypointsA, vector<KeyPoint>& keypointsB)
 {
     Mat imgA_gray, imgB_gray, imgMatch;
-    vector<KeyPoint> keypointsA, keypointsB;
     Mat descriptorsA, descriptorsB;
-    vector<DMatch> matches;
+    vector<DMatch> matches, good_matches;
 
     //Detector
     int minHessian = 400;
@@ -159,11 +162,49 @@ void extractDescriptors(const Mat imgA, const Mat imgB)
     t = ((double)getTickCount() - t)/getTickFrequency();
     cout << "Feature Points matched in " << t <<" seconds" << endl;
    
+
+    double max_dist = 0; double min_dist = 10000;
+
+    for (int i = 0; i < descriptorsA.rows; i++){
+        double dist = matches[i].distance;
+        if (dist < min_dist)
+            min_dist = dist;
+        if (dist > max_dist)
+            max_dist = dist;
+    }
+
+    cout << "-- Max dist : " << max_dist << endl;
+    cout << "-- Min dist : " << min_dist  << endl;
+
+    for (int i = 0; i < descriptorsA.rows; i++){
+        if (matches[i].distance < 3*min_dist)
+            good_matches.push_back(matches[i]);
+    }
+
     //Display
-    drawMatches(imgA, keypointsA, imgB, keypointsB, matches, imgMatch);
+    drawMatches(imgA, keypointsA, imgB, keypointsB, good_matches, imgMatch, Scalar::all(-1), Scalar::all(-1),
+               vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
     namedWindow("matches", WINDOW_NORMAL);
     resizeWindow("matches", 600, 600);
     imshow("matches", imgMatch);
+
+    vector<Point2f> A;
+    vector<Point2f> B;
+
+    for (int i = 0; i < good_matches.size(); i++){
+        A.push_back(keypointsA[good_matches[i].queryIdx].pt);
+        B.push_back(keypointsA[good_matches[i].trainIdx].pt);
+    }
+
+    //homography
+    Mat h = findHomography(A, B, RANSAC);
+
+    Mat out;
+    warpPerspective(imgA, out, h, imgB.size());
+    namedWindow("result", WINDOW_NORMAL);
+    resizeWindow("result", 600, 600);
+    imshow("result", out);
+    waitKey(0);
 }
 
 
@@ -194,6 +235,55 @@ void joinImgs(Mat in0, Mat in1, Mat& out){
     in1 = in1(Rect(x, 0, width, in1.rows));
     
     hconcat(in0, in1, out);
+}
+
+
+int joinImgsRANSAC(const Mat imgA, const Mat imgB, vector<KeyPoint>& keypointsA, vector<KeyPoint>& keypointsB){
+    //parameters
+    int n = 3;      //the number of random points to pick every iteration in order to create the transform
+    int k = 100;    //the number of iterations to run
+    int t = 5;      //the threshold for the square distance for a point to be considered a match
+    int d = 40;     //the number of points that need to matched for the transform to be valid
+
+    int best_model = NULL;
+    int best_error = INT_MAX;
+
+    int size = keypointsA.size();
+    int rand_indices[n];
+    KeyPoint base_points[n];
+    KeyPoint input_points[n];
+    int maybe_model = NULL;
+
+    srand(0);
+
+    for (int i = 0; i < k; i++){
+        for (int j = 0; j < n; j++){
+            rand_indices[j] = rand() % size;
+        }
+        for (int j = 0; j < n; j++){
+            base_points[j] = keypointsA[rand_indices[j]];
+            input_points[j] = keypointsB[rand_indices[j]];
+        }
+        //find best transform from input_points -> base_points
+        maybe_model = NULL;
+
+        int consensus_set = 0;
+        int total_error = 0;
+        
+        for (int j = 0; j < size; j++){
+            int error = 0;//square distance of the difference between image2_points[j] transformed by maybe_model and image1_points[j]
+            if (error < t){
+                consensus_set++;
+                total_error += error;
+            }
+        }
+        
+        if (consensus_set > d && total_error < best_error){
+            best_model = maybe_model;
+            best_error = total_error;
+        }
+    }
+    return best_model;
 }
 
 
@@ -228,13 +318,15 @@ int main( int argc, char* argv[])
     correctShift(dst0);
     correctShift(dst1);
 
-    bundleAdjustment(dst0);
-    bundleAdjustment(dst1);
+    //bundleAdjustment(dst0);
+    //bundleAdjustment(dst1);
     t = ((double)getTickCount() - t)/getTickFrequency();
     cout << "Image transformed in " << t <<" seconds" << endl;
     
 
-    extractDescriptors(dst0, dst1);
+    vector<KeyPoint> imgA_points, imgB_points;
+    extractDescriptors(dst0, dst1, imgA_points, imgB_points);
+    //joinImgsRANSAC(dst0, dst1, imgA_points, imgB_points);
     joinImgs(dst0, dst1, out);
 
 

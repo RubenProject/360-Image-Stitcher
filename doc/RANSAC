@@ -1,0 +1,26 @@
+The input to the algorithm is:
+n - the number of random points to pick every iteration in order to create the transform. I chose n = 3 in my implementation.
+k - the number of iterations to run
+t - the threshold for the square distance for a point to be considered as a match
+d - the number of points that need to be matched for the transform to be valid
+image1_points and image2_points - two arrays of the same size with points. Assumes that image1_points[x] is best mapped to image2_points[x] accodring to the computed features.
+
+best_model = null
+best_error = Inf
+for i = 0:k
+  rand_indices = n random integers from 0:num_points
+  base_points = image1_points[rand_indices]
+  input_points = image2_points[rand_indices] 
+  maybe_model = find best transform from input_points -> base_points
+
+  consensus_set = 0
+  total_error = 0
+  for i = 0:num_points
+    error = square distance of the difference between image2_points[i] transformed by maybe_model and image1_points[i]
+    if error < t
+      consensus_set += 1
+      total_error += error
+
+  if consensus_set > d && total_error < best_error
+    best_model = maybe_model
+    best_error = total_error
