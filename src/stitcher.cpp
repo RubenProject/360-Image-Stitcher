@@ -122,8 +122,9 @@ void correctShift(Mat& img){
 }
 
 
-void extractDescriptors(const Mat imgA, const Mat imgB, vector<KeyPoint>& keypointsA, vector<KeyPoint>& keypointsB)
+void extractDescriptors(const Mat imgA, const Mat imgB)
 {
+    vector<KeyPoint> keypointsA, keypointsB;
     Mat imgA_gray, imgB_gray, imgMatch;
     Mat descriptorsA, descriptorsB;
     vector<DMatch> matches, good_matches;
@@ -177,7 +178,7 @@ void extractDescriptors(const Mat imgA, const Mat imgB, vector<KeyPoint>& keypoi
     cout << "-- Min dist : " << min_dist  << endl;
 
     for (int i = 0; i < descriptorsA.rows; i++){
-        if (matches[i].distance < 3*min_dist)
+        if (matches[i].distance < 3 * min_dist)
             good_matches.push_back(matches[i]);
     }
 
@@ -191,16 +192,18 @@ void extractDescriptors(const Mat imgA, const Mat imgB, vector<KeyPoint>& keypoi
     vector<Point2f> A;
     vector<Point2f> B;
 
-    for (int i = 0; i < good_matches.size(); i++){
+    for (int i = 0; i < (int)good_matches.size(); i++){
         A.push_back(keypointsA[good_matches[i].queryIdx].pt);
-        B.push_back(keypointsA[good_matches[i].trainIdx].pt);
+        B.push_back(keypointsB[good_matches[i].trainIdx].pt);
     }
 
     //homography
     Mat h = findHomography(A, B, RANSAC);
+    cout << h << endl;
 
     Mat out;
-    warpPerspective(imgA, out, h, imgB.size());
+    warpPerspective(imgA, out, h, imgA.size());
+
     namedWindow("result", WINDOW_NORMAL);
     resizeWindow("result", 600, 600);
     imshow("result", out);
@@ -235,55 +238,6 @@ void joinImgs(Mat in0, Mat in1, Mat& out){
     in1 = in1(Rect(x, 0, width, in1.rows));
     
     hconcat(in0, in1, out);
-}
-
-
-int joinImgsRANSAC(const Mat imgA, const Mat imgB, vector<KeyPoint>& keypointsA, vector<KeyPoint>& keypointsB){
-    //parameters
-    int n = 3;      //the number of random points to pick every iteration in order to create the transform
-    int k = 100;    //the number of iterations to run
-    int t = 5;      //the threshold for the square distance for a point to be considered a match
-    int d = 40;     //the number of points that need to matched for the transform to be valid
-
-    int best_model = NULL;
-    int best_error = INT_MAX;
-
-    int size = keypointsA.size();
-    int rand_indices[n];
-    KeyPoint base_points[n];
-    KeyPoint input_points[n];
-    int maybe_model = NULL;
-
-    srand(0);
-
-    for (int i = 0; i < k; i++){
-        for (int j = 0; j < n; j++){
-            rand_indices[j] = rand() % size;
-        }
-        for (int j = 0; j < n; j++){
-            base_points[j] = keypointsA[rand_indices[j]];
-            input_points[j] = keypointsB[rand_indices[j]];
-        }
-        //find best transform from input_points -> base_points
-        maybe_model = NULL;
-
-        int consensus_set = 0;
-        int total_error = 0;
-        
-        for (int j = 0; j < size; j++){
-            int error = 0;//square distance of the difference between image2_points[j] transformed by maybe_model and image1_points[j]
-            if (error < t){
-                consensus_set++;
-                total_error += error;
-            }
-        }
-        
-        if (consensus_set > d && total_error < best_error){
-            best_model = maybe_model;
-            best_error = total_error;
-        }
-    }
-    return best_model;
 }
 
 
@@ -323,10 +277,16 @@ int main( int argc, char* argv[])
     t = ((double)getTickCount() - t)/getTickFrequency();
     cout << "Image transformed in " << t <<" seconds" << endl;
     
+    Mat imgA_left, imgA_right, imgB_left, imgB_right;
 
-    vector<KeyPoint> imgA_points, imgB_points;
-    extractDescriptors(dst0, dst1, imgA_points, imgB_points);
-    //joinImgsRANSAC(dst0, dst1, imgA_points, imgB_points);
+    imgA_left = dst0(Rect(0, 0, dst0.cols/2, dst0.rows));
+    imgA_right = dst0(Rect(dst0.cols/4*3, 0, dst0.cols/4, dst0.rows));
+    imgB_left = dst1(Rect(0, 0, dst1.cols/4, dst1.rows));
+    imgB_right = dst1(Rect(dst1.cols/2, 0, dst1.cols/2, dst1.rows));
+
+    extractDescriptors(imgA_right, imgB_left);
+    //extractDescriptors(imgB_right, imgA_left);
+
     joinImgs(dst0, dst1, out);
 
 
