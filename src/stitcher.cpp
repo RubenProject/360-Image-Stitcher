@@ -122,7 +122,7 @@ void correctShift(Mat& img){
 }
 
 
-void extractDescriptors(const Mat imgA, const Mat imgB)
+Mat extractDescriptors(const Mat imgA, const Mat imgB)
 {
     vector<KeyPoint> keypointsA, keypointsB;
     Mat imgA_gray, imgB_gray, imgMatch;
@@ -199,7 +199,7 @@ void extractDescriptors(const Mat imgA, const Mat imgB)
 
     //homography
     Mat h = findHomography(A, B, RANSAC);
-    cout << h << endl;
+    cout << "homography matrix: " << endl << h << endl;
 
     Mat out;
     warpPerspective(imgA, out, h, imgA.size());
@@ -207,39 +207,54 @@ void extractDescriptors(const Mat imgA, const Mat imgB)
     namedWindow("result", WINDOW_NORMAL);
     resizeWindow("result", 600, 600);
     imshow("result", out);
-    waitKey(0);
+
+    return h;
 }
 
 
-void bundleAdjustment(Mat& src){
+void bundleAdjustment(Mat& src, double factor){
     Mat res;
-    float adjfact = 0.96;
-    float update = (1 - adjfact) / src.rows;
-    float x, y;
+    double update = (1 - factor) / src.rows;
+    double x, y;
     res.create(src.rows, src.cols, src.type());
     for (int j = 0; j < res.rows; ++j){
         for (int i = 0; i < res.cols; ++i){
             x = i - (src.cols / 2);
-            x *= adjfact;
+            x *= factor;
             x += src.cols / 2;
             y = j;
             res.at<Vec3b>(j, i) = src.at<Vec3b>(y, x);
         }
-        adjfact += update;
+        factor += update;
     }
     src = res;
 }
 
 
-void joinImgs(Mat in0, Mat in1, Mat& out){
-    int width = in0.cols * OVERLAP_FACTOR;
-    int x = (in0.cols - width) / 2;
-    in0 = in0(Rect(x, 0, width, in0.rows));
-    in1 = in1(Rect(x, 0, width, in1.rows));
-    
-    hconcat(in0, in1, out);
+void joinImgs2(Mat A, Mat B, Mat& out, int overlap, int allign){
+    out.create(A.rows, A.cols*2 - overlap, A.type());
+    for (int i = 0; i < out.cols; i++){
+        for (int j = 0; j < out.rows; j++){
+            if ( i <  A.cols - overlap / 2){
+                out.at<Vec3b>(j, i) = A.at<Vec3b>(j, i);
+            } else if (j + allign < B.rows){
+                out.at<Vec3b>(j, i) = B.at<Vec3b>(j + allign, i - B.cols + overlap);
+            } else {
+                out.at<Vec3b>(j, i) = Vec3b(0,0,0);
+            }
+
+        }
+    }
 }
 
+
+Mat rotateImage(Mat src, double angle){
+    Mat res;
+    Point center = Point(src.cols/2, src.rows/2);
+    Mat r = getRotationMatrix2D(center, angle, 1.0);
+    warpAffine(src, res, r, res.size());
+    return res;
+}
 
 int main( int argc, char* argv[])
 {
@@ -272,32 +287,70 @@ int main( int argc, char* argv[])
     correctShift(dst0);
     correctShift(dst1);
 
-    //bundleAdjustment(dst0);
-    //bundleAdjustment(dst1);
     t = ((double)getTickCount() - t)/getTickFrequency();
     cout << "Image transformed in " << t <<" seconds" << endl;
     
-    Mat imgA_left, imgA_right, imgB_left, imgB_right;
+    //Mat imgA_left, imgA_right, imgB_left, imgB_right;
+    //int width_0 = dst0.cols/4;
+    //int width_1 = width_0;
 
-    imgA_left = dst0(Rect(0, 0, dst0.cols/2, dst0.rows));
-    imgA_right = dst0(Rect(dst0.cols/4*3, 0, dst0.cols/4, dst0.rows));
-    imgB_left = dst1(Rect(0, 0, dst1.cols/4, dst1.rows));
-    imgB_right = dst1(Rect(dst1.cols/2, 0, dst1.cols/2, dst1.rows));
+    //imgA_left = dst0(Rect(0, 0, width_0, dst0.rows));
+    //imgA_right = dst0(Rect(dst0.cols - width_0, 0, width_0, dst0.rows));
 
-    extractDescriptors(imgA_right, imgB_left);
-    //extractDescriptors(imgB_right, imgA_left);
+    //imgB_left = dst1(Rect(0, 0, width_1, dst1.rows));
+    //imgB_right = dst1(Rect(dst1.cols - width_1, 0, width_1, dst1.rows));
 
-    joinImgs(dst0, dst1, out);
+    //Mat h0 = extractDescriptors(imgA_right, imgB_left);
+    //Mat h1 = //extractDescriptors(imgB_right, imgA_left);
+
+    //Mat res0, res1;
+    //res1 = dst1;
+    //res0.create(dst0.rows, dst0.cols*2, dst0.type());
+    //warpPerspective(dst0, res0, h0, res0.size());
+    //res1.create(dst1.rows, dst1.cols*2, dst1.type());
+    //warpPerspective(dst1, res1, h1, res1.size());
+    //hconcat(dst1, dst0, out);
+
+    //namedWindow("res0", WINDOW_NORMAL);
+    //resizeWindow("res0", 600, 600);
+    //imshow("res0", res0);
+    //namedWindow("res1", WINDOW_NORMAL);
+    //resizeWindow("res1", 600, 600);
+    //imshow("res1", res1);
+    //waitKey(0);
+    //joinImgs(res0, res1, out);
 
 
     //hconcat(dst0, dst1, out);
-    namedWindow("out", WINDOW_NORMAL);
-    resizeWindow("out", 1200, 600);
-    imshow("out", out);
+    int overlap = 3677;
+    int allign = 0;
+    int x, y;
+    bundleAdjustment(dst0, 0.96);
+    bundleAdjustment(dst1, 0.96);
+    dst0 = rotateImage(dst0, -0.73);
+    while (true){
+        joinImgs2(dst1, dst0, out, overlap, allign);
+        Mat A2 = out(Rect(0, 0, out.cols/2, out.rows));
+        Mat B2 = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
+        joinImgs2(B2, A2, out, overlap, 0);
+        correctShift(out);
+        string windowvalue = "x = ";
+        windowvalue += to_string(overlap);
+        windowvalue += " ,y = ";
+        windowvalue += to_string(allign);
+        namedWindow(windowvalue, WINDOW_NORMAL);
+        resizeWindow(windowvalue, 1200, 600);
+        imshow(windowvalue, out);
+        waitKey(0);
+        cout << "x: , y: " << endl;
+        cin >> x >> y;
+        overlap += x;
+        allign += y;
+    }
 
     string outputFileName(filename);
     outputFileName = outputFileName.substr(outputFileName.length() - 12);
-    outputFileName = "../img/test/" + outputFileName;
+    outputFileName = "../img/result/" + outputFileName;
     cout << "Writing to: " << outputFileName << endl;
     imwrite(outputFileName, out);
 
