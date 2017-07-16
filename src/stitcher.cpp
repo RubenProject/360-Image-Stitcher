@@ -38,7 +38,7 @@ using namespace cv::xfeatures2d;
 #define THREAD_COUNT 12
 #define PI 3.1415926535897
 
-#define INPUT_QUEUE "/dev/input/event2"
+#define INPUT_QUEUE "/dev/input/event4"
 #define EVENT_LEN 16
 
 struct Orientation {
@@ -255,14 +255,14 @@ void bundleAdjustment(Mat& src, double factor){
 }
 
 
-void joinImgs(Mat A, Mat B, Mat& out, int overlap, int allign){
-    out.create(A.rows, A.cols*2 - overlap, A.type());
+void joinImgs(Mat A, Mat B, Mat& out, int x, int y){
+    out.create(A.rows, A.cols*2 - x, A.type());
     for (int i = 0; i < out.cols; i++){
         for (int j = 0; j < out.rows; j++){
-            if ( i <  A.cols - overlap / 2){
+            if ( i <  A.cols - x / 2){
                 out.at<Vec3b>(j, i) = A.at<Vec3b>(j, i);
-            } else if (j + allign < B.rows){
-                out.at<Vec3b>(j, i) = B.at<Vec3b>(j + allign, i - B.cols + overlap);
+            } else if (j + y < B.rows && j + y >= 0){
+                out.at<Vec3b>(j, i) = B.at<Vec3b>(j + y, i - B.cols + x);
             } else {
                 out.at<Vec3b>(j, i) = Vec3b(0,0,0);
             }
@@ -292,7 +292,7 @@ void adjustImg(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
         A = rotateImage(A, o_A.r);
     if(o_B.r != 0.00)
         B = rotateImage(B, o_B.r);
-    joinImgs(B, A, out, o_A.x, o_A.y);
+    joinImgs(A, B, out, o_A.x, o_A.y);
     Mat A2 = out(Rect(0, 0, out.cols/2, out.rows));
     Mat B2 = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
     joinImgs(B2, A2, out, o_B.x, o_B.y);
@@ -370,6 +370,7 @@ void parseInputASCII(int key, Orientation& o_A, Orientation& o_B){
 }
 
 
+//display on different thread
 void displayPreview(){
     namedWindow("Manual Position" , WINDOW_NORMAL);
     resizeWindow("Manual Position" , 1200, 600);
@@ -377,15 +378,34 @@ void displayPreview(){
         imshow("Manual Position", preview);
         waitKey(30);
     }
+    destroyWindow("Manual Position");
+    return;
 }
 
-void interactImg(const Mat A, const Mat B, Orientation& o_A, Orientation& o_B){
+
+void interactImg(const Mat A, const Mat B, int scale, Orientation& o_A, Orientation& o_B){
     //Initial orientation
-    o_A = {.x = 0, .y = 0,
+    o_A = {.x = 461, .y = 0,
+            .r = -0.60,
+            .b = 0.98,
+            .s = 1.00};
+    o_B = {.x = 461, .y = 1,
+            .r = -0.1,
+            .b = 0.98,
+            .s = 1.00};
+
+    o_A.x *= scale;
+    o_A.y *= scale;
+    o_B.x *= scale;
+    o_B.y *= scale;
+    return;
+
+    ///Initial orientation
+    o_A = {.x = 3600/scale, .y = 0,
             .r = 0.00,
             .b = 1.00,
             .s = 1.00};
-    o_B = {.x = 0, .y = 0,
+    o_B = {.x = 3600/scale, .y = 0,
             .r = 0.00,
             .b = 1.00,
             .s = 1.00};
@@ -395,8 +415,8 @@ void interactImg(const Mat A, const Mat B, Orientation& o_A, Orientation& o_B){
 
     //downscaling for faster operations
     Mat A_s, B_s, out_s;
-    resize(A, A_s, Size(A.cols/8, A.rows/8));
-    resize(B, B_s, Size(B.cols/8., B.rows/8));
+    resize(A, A_s, Size(A.cols/scale, A.rows/scale));
+    resize(B, B_s, Size(B.cols/scale, B.rows/scale));
 
     if((fd = open(INPUT_QUEUE, O_RDONLY)) == -1)
         cerr << "cannot read from device" << endl;
@@ -417,7 +437,107 @@ void interactImg(const Mat A, const Mat B, Orientation& o_A, Orientation& o_B){
         cout << key << endl;
     }
     cout << "finalizing positioning" << endl;
+    t.join();
+    cout << "o_A:" << "x: " << o_A.x << " ,y: " << o_A.y << " ,r: " << o_A.r << " ,b: " << o_A.b << endl;
+    cout << "o_B:" << "x: " << o_B.x << " ,y: " << o_B.y << " ,r: " << o_B.r << " ,b: " << o_B.b << endl;
+    //adjust orientations for full resolution image
+    o_A.x *= scale;
+    o_A.y *= scale;
+    o_B.x *= scale;
+    o_B.y *= scale;
 }
+
+
+float euclidDist(Vec3b p_A, Vec3b p_B){
+    float rsquared = pow((p_B[0] - p_A[0]), 2);
+    float gsquared = pow((p_B[1] - p_A[1]), 2);
+    float bsquared = pow((p_B[2] - p_A[2]), 2);
+    return rsquared + gsquared + bsquared;
+}
+
+
+
+void displayGrayMap(Mat img){
+    float min = 1000000, max = -1, temp;
+    for (int i = 0; i < img.rows; i++){
+        for (int j = 0; j < img.cols; j++){
+            temp = img.at<float>(i, j);
+            if (temp < min)
+                min = temp;
+            if (temp > max)
+                max = temp;
+        }
+    }
+    for (int i = 0; i < img.rows; i++){
+        for (int j = 0; j < img.cols; j++){
+            temp = img.at<float>(i, j);
+            temp -= min; 
+            temp /= max - min;
+            temp *= 255;
+            img.at<float>(i, j) = temp;
+        }
+    }
+    namedWindow("gray", WINDOW_NORMAL);
+    resizeWindow("gray", 600, 600);
+    imshow("gray", img);
+    waitKey(0);
+}
+
+
+void stitch(Mat A, Mat B, Mat& out, int x, int y){
+    Mat C; //matrix for energy values
+    //calculate and isolate overlap
+    A = A(Rect(A.cols-x/4*3, 0, x/2, A.rows));
+    B = B(Rect(x/4, 0, x/2, B.rows));
+    namedWindow("A2", WINDOW_NORMAL);
+    resizeWindow("A2", 600, 600);
+    imshow("A2", A);
+    namedWindow("B2", WINDOW_NORMAL);
+    resizeWindow("B2", 600, 600);
+    imshow("B2", B);
+    C.create(A.rows, x/2, DataType<float>::type);
+    for (int i = 0; i < C.rows; i++){
+        for (int j = 0; j < C.cols; j++){
+            C.at<float>(i, j) = euclidDist(A.at<Vec3b>(i, j), B.at<Vec3b>(i, j));
+        }
+    }
+    displayGrayMap(C);
+
+    //find shortest path from top to bottom through mat C
+    //
+
+
+
+
+
+
+
+
+
+    namedWindow("out", WINDOW_NORMAL);
+    resizeWindow("out", 600, 600);
+    imshow("out", out);
+    waitKey(0);
+}
+
+
+void joinAndStitch(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
+    if(o_A.b != 1.00)
+        bundleAdjustment(A, o_A.b);
+    if(o_B.b != 1.00)
+        bundleAdjustment(B, o_B.b);
+    if(o_A.r != 0.00)
+        A = rotateImage(A, o_A.r);
+    if(o_B.r != 0.00)
+        B = rotateImage(B, o_B.r);
+    //joinImgs(B, A, out, o_A.x, o_A.y);
+    stitch(B, A, out, o_A.x, o_A.y);
+    Mat A2 = out(Rect(0, 0, out.cols/2, out.rows));
+    Mat B2 = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
+    //joinImgs(B2, A2, out, o_B.x, o_B.y);
+    stitch(B2, A2, out, o_B.x, o_B.y);
+    correctShift(out);
+} 
 
 
 int main( int argc, char* argv[])
@@ -476,17 +596,15 @@ int main( int argc, char* argv[])
     //hconcat(dst1, dst0, out);
 
     Orientation o_A, o_B;
-    interactImg(dst0, dst1, o_A, o_B);
-    adjustImg(dst0, dst1, o_A, o_B, out);
+    interactImg(dst0, dst1, 8, o_A, o_B);
+    joinAndStitch(dst0, dst1, o_A, o_B, out);
+    //adjustImg(dst0, dst1, o_A, o_B, out);
 
     string outputFileName(filename);
     outputFileName = outputFileName.substr(outputFileName.length() - 12);
     outputFileName = "../img/result/" + outputFileName;
     cout << "Writing to: " << outputFileName << endl;
     imwrite(outputFileName, out);
-
-    waitKey();
-
 
     return 0;
 }
