@@ -1,4 +1,5 @@
 #include <vector>
+#include <stack>
 #include <string>
 #include <iostream>
 #include <thread>
@@ -458,7 +459,7 @@ float euclidDist(Vec3b p_A, Vec3b p_B){
 
 
 void displayGrayMap(Mat img){
-    float min = 1000000, max = -1, temp;
+    float min = FLT_MAX, max = -1, temp;
     for (int i = 0; i < img.rows; i++){
         for (int j = 0; j < img.cols; j++){
             temp = img.at<float>(i, j);
@@ -484,6 +485,90 @@ void displayGrayMap(Mat img){
 }
 
 
+double h(Point A, Point B){
+    double ysquared = pow(B.y - A.y, 2);
+    double xsquared = pow(B.x - B.y, 2);
+    return xsquared + ysquared;
+}
+
+
+bool elemOf(Point e, vector<Point>v){
+    for(int i = 0; i < (int)v.size(); i++){
+        if (v[i] == e)
+            return true;
+    }
+    return false;
+}
+
+
+vector<Point>* calcPath(vector<vector<Point>> cameFrom, Point current){
+    vector<Point>* totalPath;
+    totalPath->push_back(current);
+    while(elemOf(current, cameFrom)){
+        current = cameFrom[current.x][current.y];
+        totalPath->push_back(current);
+    }
+    return totalPath;
+}
+
+//TODO:convert all 2d vectors to 1d and points to integers...
+//edit variable names
+//https://github.com/daancode/a-star/blob/master/source/AStar.cpp
+vector<Point>* aStar(Mat C, Point start, Point goal){
+    int row_width = C.cols;
+    vector<Point2i> closedSet;
+    vector<Point2i> openSet;
+    openSet.push_back(start);
+
+    vector<Point2i> cameFrom(C.cols * C.rows, Point2i(0,0)); 
+
+    vector<double> gScore(C.cols * C.rows, DBL_MAX);
+
+    gScore[start.y * row_width + start.x] = (double)C.at<float>(start);
+
+    vector<double> fScore(C.cols * C.rows, DBL_MAX);
+
+    fScore[start.y] = h(start, goal);
+
+    while (!openSet.empty()){
+        Point current;
+        Point neighbour;
+        double l_fscore = DBL_MAX;
+        double tent_gScore;
+        for (int i = 0; i < (int)openSet.size(); i++){
+            if (fScore[openSet[i].x][openSet[i].y] < l_fscore){
+                l_fscore = fScore[openSet[i].x][openSet[i].y]);
+                current = openSet[i];
+            }
+        }
+        if (current == goal)
+            return calcPath(cameFrom, current);
+
+        openSet.erase(current);
+        closedSet.push_back(current);
+
+        for (int i = -1; i < 2; i ++){
+            for (int j = -1; j < 2; j++){
+                neighbour = Point(current.x + i, current.y + j);
+                if (elemOf(neighbour, closedSet)){
+                    continue;
+
+                } else {
+                    openSet.push_back(neighbour);
+                    tent_gScore = gScore[current.x][current.y] + (double)C.at<float>(neighbour);
+                    if (tent_gScore >= gScore[neighbour.x][neighbour.y]){
+                        continue;
+                    }
+                    cameFrom[neighbour.x][neighbour.y] = current;
+                    gScore[neighbour.x][neighbour.y] = tent_gScore;
+                    fScore.at[neighbour.x][neighbour.y] = gScore[neighbour.x][neighbour.y] + h(neighbour, goal);
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
 void stitch(Mat A, Mat B, Mat& out, int x, int y){
     Mat C; //matrix for energy values
     //calculate and isolate overlap
@@ -504,8 +589,9 @@ void stitch(Mat A, Mat B, Mat& out, int x, int y){
     displayGrayMap(C);
 
     //find shortest path from top to bottom through mat C
-    //
-
+    
+    vector<Point>* p;
+    p = aStar(C, Point(C.cols/2, 0), Point(C.cols/2, C.rows));
 
 
 
