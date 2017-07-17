@@ -2,11 +2,15 @@ CXX ?= g++
 
 CXXFLAGS += -c -Wall -std=c++11 $(shell pkg-config --cflags opencv)
 LDFLAGS += $(shell pkg-config --libs --static opencv)
+OBJS = AStar.o stitcher.o
 
-all: stitcher
+stitcher: $(OBJS)
+	$(CXX) $(OBJS) -o stitcher $(LDFLAGS)
 
-stitcher: stitcher.o; $(CXX) $< -o $@ $(LDFLAGS)
+AStar.o: AStar.cpp AStar.hpp
+	$(CXX) $(CXXFLAGS) AStar.cpp
 
-%.o: %.cpp; $(CXX) $< -o $@ $(CXXFLAGS)
+stitcher.o: stitcher.cpp AStar.hpp
+	$(CXX) stitcher.cpp $(CXXFLAGS)
 
-clean: ; rm -f stitcher.o stitcher
+clean: ; rm -f stitcher.o astar.o stitcher

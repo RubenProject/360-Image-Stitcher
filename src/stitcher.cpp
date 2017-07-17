@@ -28,6 +28,7 @@
 #include <opencv2/features2d.hpp>
 #include <opencv2/xfeatures2d.hpp>
 
+#include "AStar.hpp"
 
 using namespace std;
 using namespace cv;
@@ -504,10 +505,10 @@ bool elemOf(Point e, vector<Point>v){
 vector<Point>* calcPath(vector<vector<Point>> cameFrom, Point current){
     vector<Point>* totalPath;
     totalPath->push_back(current);
-    while(elemOf(current, cameFrom)){
+    //while(elemOf(current, cameFrom)){
         current = cameFrom[current.x][current.y];
         totalPath->push_back(current);
-    }
+    //}
     return totalPath;
 }
 
@@ -515,7 +516,7 @@ vector<Point>* calcPath(vector<vector<Point>> cameFrom, Point current){
 //edit variable names
 //https://github.com/daancode/a-star/blob/master/source/AStar.cpp
 vector<Point>* aStar(Mat C, Point start, Point goal){
-    int row_width = C.cols;
+/*    int row_width = C.cols;
     vector<Point2i> closedSet;
     vector<Point2i> openSet;
     openSet.push_back(start);
@@ -565,7 +566,7 @@ vector<Point>* aStar(Mat C, Point start, Point goal){
                 }
             }
         }
-    }
+    }*/
     return NULL;
 }
 
@@ -591,7 +592,15 @@ void stitch(Mat A, Mat B, Mat& out, int x, int y){
     //find shortest path from top to bottom through mat C
     
     vector<Point>* p;
-    p = aStar(C, Point(C.cols/2, 0), Point(C.cols/2, C.rows));
+    AStar::Generator generator;
+    generator.setWorldSize({25, 25});
+    //generator.setHeuristic(AStar::Heuristic::Euclidian);
+    generator.setDiagonalMovement(true);
+    auto path = generator.findPath({0, 0}, {20,20});
+    for(auto& coordinate : path) {
+        std::cout << coordinate.x << " " << coordinate.y << "\n";
+    }
+    //p = aStar(C, Point(C.cols/2, 0), Point(C.cols/2, C.rows));
 
 
 
