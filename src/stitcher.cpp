@@ -40,7 +40,7 @@ using namespace cv::xfeatures2d;
 #define THREAD_COUNT 12
 #define PI 3.1415926535897
 
-#define INPUT_QUEUE "/dev/input/event4"
+#define INPUT_QUEUE "/dev/input/event2"
 #define EVENT_LEN 16
 
 struct Orientation {
@@ -283,8 +283,6 @@ Mat rotateImage(Mat src, double angle){
 }
 
 
-
-
 void adjustImg(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
     if(o_A.b != 1.00)
         bundleAdjustment(A, o_A.b);
@@ -387,13 +385,13 @@ void displayPreview(){
 
 void interactImg(const Mat A, const Mat B, int scale, Orientation& o_A, Orientation& o_B){
     //Initial orientation
-    o_A = {.x = 461, .y = 0,
-            .r = -0.60,
-            .b = 0.98,
+    o_A = {.x = 961, .y = -1,
+            .r = 0.15,
+            .b = 1.00,
             .s = 1.00};
-    o_B = {.x = 461, .y = 1,
-            .r = -0.1,
-            .b = 0.98,
+    o_B = {.x = 924, .y = 0,
+            .r = -0.9,
+            .b = 1.00,
             .s = 1.00};
 
     o_A.x *= scale;
@@ -450,15 +448,6 @@ void interactImg(const Mat A, const Mat B, int scale, Orientation& o_A, Orientat
 }
 
 
-float euclidDist(Vec3b p_A, Vec3b p_B){
-    float rsquared = pow((p_B[0] - p_A[0]), 2);
-    float gsquared = pow((p_B[1] - p_A[1]), 2);
-    float bsquared = pow((p_B[2] - p_A[2]), 2);
-    return rsquared + gsquared + bsquared;
-}
-
-
-
 void displayGrayMap(Mat img){
     float min = FLT_MAX, max = -1, temp;
     for (int i = 0; i < img.rows; i++){
@@ -486,128 +475,62 @@ void displayGrayMap(Mat img){
 }
 
 
-double h(Point A, Point B){
-    double ysquared = pow(B.y - A.y, 2);
-    double xsquared = pow(B.x - B.y, 2);
-    return xsquared + ysquared;
+float euclidDist(const Vec3b a, const Vec3b b){
+    float bsquared = pow(b[0] - a[0], 2);
+    float gsquared = pow(b[1] - a[1], 2);
+    float rsquared = pow(b[2] - a[2], 2);
+    return bsquared + gsquared + rsquared;
 }
 
 
-bool elemOf(Point e, vector<Point>v){
-    for(int i = 0; i < (int)v.size(); i++){
-        if (v[i] == e)
-            return true;
-    }
-    return false;
-}
-
-
-vector<Point>* calcPath(vector<vector<Point>> cameFrom, Point current){
-    vector<Point>* totalPath;
-    totalPath->push_back(current);
-    //while(elemOf(current, cameFrom)){
-        current = cameFrom[current.x][current.y];
-        totalPath->push_back(current);
-    //}
-    return totalPath;
-}
-
-//TODO:convert all 2d vectors to 1d and points to integers...
-//edit variable names
-//https://github.com/daancode/a-star/blob/master/source/AStar.cpp
-vector<Point>* aStar(Mat C, Point start, Point goal){
-/*    int row_width = C.cols;
-    vector<Point2i> closedSet;
-    vector<Point2i> openSet;
-    openSet.push_back(start);
-
-    vector<Point2i> cameFrom(C.cols * C.rows, Point2i(0,0)); 
-
-    vector<double> gScore(C.cols * C.rows, DBL_MAX);
-
-    gScore[start.y * row_width + start.x] = (double)C.at<float>(start);
-
-    vector<double> fScore(C.cols * C.rows, DBL_MAX);
-
-    fScore[start.y] = h(start, goal);
-
-    while (!openSet.empty()){
-        Point current;
-        Point neighbour;
-        double l_fscore = DBL_MAX;
-        double tent_gScore;
-        for (int i = 0; i < (int)openSet.size(); i++){
-            if (fScore[openSet[i].x][openSet[i].y] < l_fscore){
-                l_fscore = fScore[openSet[i].x][openSet[i].y]);
-                current = openSet[i];
-            }
-        }
-        if (current == goal)
-            return calcPath(cameFrom, current);
-
-        openSet.erase(current);
-        closedSet.push_back(current);
-
-        for (int i = -1; i < 2; i ++){
-            for (int j = -1; j < 2; j++){
-                neighbour = Point(current.x + i, current.y + j);
-                if (elemOf(neighbour, closedSet)){
-                    continue;
-
-                } else {
-                    openSet.push_back(neighbour);
-                    tent_gScore = gScore[current.x][current.y] + (double)C.at<float>(neighbour);
-                    if (tent_gScore >= gScore[neighbour.x][neighbour.y]){
-                        continue;
-                    }
-                    cameFrom[neighbour.x][neighbour.y] = current;
-                    gScore[neighbour.x][neighbour.y] = tent_gScore;
-                    fScore.at[neighbour.x][neighbour.y] = gScore[neighbour.x][neighbour.y] + h(neighbour, goal);
-                }
-            }
-        }
-    }*/
-    return NULL;
+void outputCoords(int c, int width){
+    cerr << "(" << c / width << ", " << c % width << ")";
 }
 
 void stitch(Mat A, Mat B, Mat& out, int x, int y){
-    Mat C; //matrix for energy values
     //calculate and isolate overlap
     A = A(Rect(A.cols-x/4*3, 0, x/2, A.rows));
     B = B(Rect(x/4, 0, x/2, B.rows));
+
     namedWindow("A2", WINDOW_NORMAL);
     resizeWindow("A2", 600, 600);
     imshow("A2", A);
     namedWindow("B2", WINDOW_NORMAL);
     resizeWindow("B2", 600, 600);
     imshow("B2", B);
-    C.create(A.rows, x/2, DataType<float>::type);
-    for (int i = 0; i < C.rows; i++){
-        for (int j = 0; j < C.cols; j++){
-            C.at<float>(i, j) = euclidDist(A.at<Vec3b>(i, j), B.at<Vec3b>(i, j));
+
+    const int height = A.rows;
+    const int width = A.cols;
+    float* weights = new float[height * width];
+
+    for (int i = 0; i < width; i++){
+        for (int j = 0; j < height; j++){
+            weights[j * width + i] = euclidDist(A.at<Vec3b>(j, i), B.at<Vec3b>(j, i)); 
         }
     }
+    Mat C(height, width, CV_32FC1, weights);
     displayGrayMap(C);
 
     //find shortest path from top to bottom through mat C
-    
-    vector<Point>* p;
-    AStar::Generator generator;
-    generator.setWorldSize({25, 25});
-    //generator.setHeuristic(AStar::Heuristic::Euclidian);
-    generator.setDiagonalMovement(true);
-    auto path = generator.findPath({0, 0}, {20,20});
-    for(auto& coordinate : path) {
-        std::cout << coordinate.x << " " << coordinate.y << "\n";
-    }
-    //p = aStar(C, Point(C.cols/2, 0), Point(C.cols/2, C.rows));
-
-
-
-
-
-
-
+    int start = width / 2;
+    int goal = width * 1 + width / 2;
+    int* paths = new int[height * width];
+    cerr << "start";
+    outputCoords(start, width);
+    cerr << "-> goal";
+    outputCoords(goal, width);
+    cerr << endl;
+    if (astar(weights, width, height, start, goal, paths)){
+        int cur = goal;
+        while(paths[cur] != start){
+            outputCoords(cur, width);
+            cur = paths[cur];
+        }
+        cerr << endl;
+    } else 
+        cerr << ":(" << endl;
+    exit(0);
+    //apply shortest path to stitching edge
 
     namedWindow("out", WINDOW_NORMAL);
     resizeWindow("out", 600, 600);
@@ -691,7 +614,8 @@ int main( int argc, char* argv[])
     //hconcat(dst1, dst0, out);
 
     Orientation o_A, o_B;
-    interactImg(dst0, dst1, 8, o_A, o_B);
+    //TODO: Scaling screws up when not set to 8
+    interactImg(dst0, dst1, 4, o_A, o_B);
     joinAndStitch(dst0, dst1, o_A, o_B, out);
     //adjustImg(dst0, dst1, o_A, o_B, out);
 
