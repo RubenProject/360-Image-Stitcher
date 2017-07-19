@@ -484,7 +484,22 @@ float euclidDist(const Vec3b a, const Vec3b b){
 
 
 void outputCoords(int c, int width){
-    cerr << "(" << c / width << ", " << c % width << ")";
+    cerr << "(" << c % width << ", " << c / width << ")";
+}
+
+
+//probably gonna launch threads for this
+void computePartialShortestPath(const float* weights, const int height, const int width,
+                                const int start, const int goal, vector<Point>& shortest_path){
+    int* paths = new int[height * width];
+    if (astar(weights, height, width, start, goal, paths)){
+        int cur = goal;
+        while(paths[cur] != start){
+            cur = paths[cur];
+            shortest_path.push_back(Point(cur % width, cur / width));
+        }
+    }
+
 }
 
 void stitch(Mat A, Mat B, Mat& out, int x, int y){
@@ -512,29 +527,66 @@ void stitch(Mat A, Mat B, Mat& out, int x, int y){
     displayGrayMap(C);
 
     //find shortest path from top to bottom through mat C
-    int start = width / 2;
-    int goal = width * 1 + width / 2;
     int* paths = new int[height * width];
-    cerr << "start";
-    outputCoords(start, width);
-    cerr << "-> goal";
-    outputCoords(goal, width);
-    cerr << endl;
-    if (astar(weights, width, height, start, goal, paths)){
+    int start = width / 2;
+    int goal = width * (height / 4) + width / 2;
+    vector<Point> shortest_path;
+    shortest_path.push_back(Point(goal % width, goal / width));
+    if (astar(weights, height, width, start, goal, paths)){
         int cur = goal;
         while(paths[cur] != start){
-            outputCoords(cur, width);
             cur = paths[cur];
+            shortest_path.push_back(Point(cur % width, cur / width));
         }
-        cerr << endl;
-    } else 
-        cerr << ":(" << endl;
-    exit(0);
+    }
+    cerr << "25%" << endl;
+    start = width * (height / 4) + width / 2;
+    goal = width * (height / 2) + width / 2;
+    shortest_path.push_back(Point(goal % width, goal / width));
+    if (astar(weights, height, width, start, goal, paths)){
+        int cur = goal;
+        while(paths[cur] != start){
+            cur = paths[cur];
+            shortest_path.push_back(Point(cur % width, cur / width));
+        }
+    }
+    cerr << "50%" << endl;
+    start = width * (height / 2) + width / 2;
+    goal = width * (height / 4 * 3) + width / 2;
+    shortest_path.push_back(Point(goal % width, goal / width));
+    if (astar(weights, height, width, start, goal, paths)){
+        int cur = goal;
+        while(paths[cur] != start){
+            cur = paths[cur];
+            shortest_path.push_back(Point(cur % width, cur / width));
+        }
+    }
+    cerr << "75%" << endl;
+    start = width * (height / 4 * 3) + width / 2;
+    goal = width * (height -1 ) + width / 2;
+    shortest_path.push_back(Point(goal % width, goal / width));
+    if (astar(weights, height, width, start, goal, paths)){
+        int cur = goal;
+        while(paths[cur] != start){
+            cur = paths[cur];
+            shortest_path.push_back(Point(cur % width, cur / width));
+        }
+    }
+    cerr << "100%" << endl;
+    Mat color;
+    cvtColor(C, color, COLOR_GRAY2BGR);
+    for (int i = 0; i < (int)shortest_path.size(); i++){
+        cout << shortest_path[i] << " ";
+        color.at<Vec3f>(shortest_path[i].y, shortest_path[i].x-1) = Vec3f(0, 0, 255);
+        color.at<Vec3f>(shortest_path[i].y, shortest_path[i].x) = Vec3f(0, 0, 255);
+        color.at<Vec3f>(shortest_path[i].y, shortest_path[i].x+1) = Vec3f(0, 0, 255);
+    }
+
     //apply shortest path to stitching edge
 
     namedWindow("out", WINDOW_NORMAL);
     resizeWindow("out", 600, 600);
-    imshow("out", out);
+    imshow("out", color);
     waitKey(0);
 }
 
