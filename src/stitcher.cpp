@@ -37,7 +37,8 @@ using namespace cv::xfeatures2d;
 
 #define OVERLAP_FACTOR 0.545
 #define FOV_FACTOR 1.08
-#define THREAD_COUNT 12
+#define THREAD_COUNT 8 
+#define FIXED_POINTS 4
 #define PI 3.1415926535897
 
 #define INPUT_QUEUE "/dev/input/event2"
@@ -49,15 +50,16 @@ struct Orientation {
 };
 
 bool MANUAL_POSITIONING_DONE;
+float ASTAR_PROGRESS;
 Mat preview;
 
 
 static void help(char* progName)
 {
     cout << endl
-        <<  "This program takes input a circular image as input and outputs a square image" << endl
+        <<  "This program stitches raw output of the Samsung Gear 360 together into a complete panorama"
         <<  "Usage:"                                                                        << endl
-        << progName << " [image_name -- default ../data/lena.jpg] "        << endl << endl;
+        << progName << " [image_name ../img/example.jpg] " << endl << endl;
 }
 
 
@@ -488,9 +490,9 @@ void outputCoords(int c, int width){
 }
 
 
-//probably gonna launch threads for this
 void computePartialShortestPath(const float* weights, const int height, const int width,
-                                const int start, const int goal, vector<Point>& shortest_path){
+                                const int start, const int goal,
+                                vector<Point>& shortest_path){
     int* paths = new int[height * width];
     if (astar(weights, height, width, start, goal, paths)){
         int cur = goal;
@@ -499,8 +501,20 @@ void computePartialShortestPath(const float* weights, const int height, const in
             shortest_path.push_back(Point(cur % width, cur / width));
         }
     }
+    ASTAR_PROGRESS += 100 / FIXED_POINTS;
+    cout << ASTAR_PROGRESS << "%" << endl;
 
 }
+
+
+void fillMask(vector<vector<bool>>& mask, Point p){
+    int i = p.x;
+    while (i < (int)mask[p.y].size()){
+        mask[p.y][i] = true;
+        i++;
+    }
+}
+
 
 void stitch(Mat A, Mat B, Mat& out, int x, int y){
     //calculate and isolate overlap
@@ -527,66 +541,66 @@ void stitch(Mat A, Mat B, Mat& out, int x, int y){
     displayGrayMap(C);
 
     //find shortest path from top to bottom through mat C
-    int* paths = new int[height * width];
-    int start = width / 2;
-    int goal = width * (height / 4) + width / 2;
     vector<Point> shortest_path;
-    shortest_path.push_back(Point(goal % width, goal / width));
-    if (astar(weights, height, width, start, goal, paths)){
-        int cur = goal;
-        while(paths[cur] != start){
-            cur = paths[cur];
-            shortest_path.push_back(Point(cur % width, cur / width));
-        }
+    vector<vector<Point>> partial_shortest_path(FIXED_POINTS, vector<Point>());
+    int update = width * height / FIXED_POINTS;
+    int start = width / 2;
+    int goal = start + update;
+    thread t[FIXED_POINTS];
+    //start worker threads with the specified amount of fixed points along the symmetry axis
+    cout << "calculating shortest path..." << endl;
+    for (int i = 0; i < FIXED_POINTS; i++){
+        outputCoords(start, width);
+        cout << "->"; 
+        outputCoords(goal, width) ;
+        cout << endl;
+        t[i] = thread(computePartialShortestPath, weights, height, width,
+                        start, goal, ref(partial_shortest_path[i]));
+        start += update;
+        goal += update;
+        if (i == FIXED_POINTS - 2)
+            goal -= width;
     }
-    cerr << "25%" << endl;
-    start = width * (height / 4) + width / 2;
-    goal = width * (height / 2) + width / 2;
-    shortest_path.push_back(Point(goal % width, goal / width));
-    if (astar(weights, height, width, start, goal, paths)){
-        int cur = goal;
-        while(paths[cur] != start){
-            cur = paths[cur];
-            shortest_path.push_back(Point(cur % width, cur / width));
-        }
+    //join threads and combine partial solutions
+    for (int i = 0; i < FIXED_POINTS; i++){
+        t[i].join();
+        for (int j = 0; j < (int)partial_shortest_path[i].size(); j++)
+            shortest_path.push_back(partial_shortest_path[i][j]);
     }
-    cerr << "50%" << endl;
-    start = width * (height / 2) + width / 2;
-    goal = width * (height / 4 * 3) + width / 2;
-    shortest_path.push_back(Point(goal % width, goal / width));
-    if (astar(weights, height, width, start, goal, paths)){
-        int cur = goal;
-        while(paths[cur] != start){
-            cur = paths[cur];
-            shortest_path.push_back(Point(cur % width, cur / width));
-        }
-    }
-    cerr << "75%" << endl;
-    start = width * (height / 4 * 3) + width / 2;
-    goal = width * (height -1 ) + width / 2;
-    shortest_path.push_back(Point(goal % width, goal / width));
-    if (astar(weights, height, width, start, goal, paths)){
-        int cur = goal;
-        while(paths[cur] != start){
-            cur = paths[cur];
-            shortest_path.push_back(Point(cur % width, cur / width));
-        }
-    }
-    cerr << "100%" << endl;
+    //display the found path with E X T R A T H I C C line
     Mat color;
     cvtColor(C, color, COLOR_GRAY2BGR);
     for (int i = 0; i < (int)shortest_path.size(); i++){
-        cout << shortest_path[i] << " ";
         color.at<Vec3f>(shortest_path[i].y, shortest_path[i].x-1) = Vec3f(0, 0, 255);
         color.at<Vec3f>(shortest_path[i].y, shortest_path[i].x) = Vec3f(0, 0, 255);
         color.at<Vec3f>(shortest_path[i].y, shortest_path[i].x+1) = Vec3f(0, 0, 255);
     }
+    //make a mask for the transition
+    vector<vector<bool>> mask(height, vector<bool>(width, false));
+    cout << "creating mask for transition..." << endl;
+    for (int i = 0; i < (int)shortest_path.size(); i++){
+        fillMask(mask, shortest_path[i]);
+    }
 
-    //apply shortest path to stitching edge
+    //apply mask to stitching edge
+    out.create(A.rows, A.cols, A.type());
+    cout << "applying mask to transition..." << endl;
+    for (int i = 0; i < out.cols; i++){
+        for (int j = 0; j < out.rows; j++){
+            if (!mask[j][i])
+                out.at<Vec3b>(j, i) = A.at<Vec3b>(j, i);
+            else
+                out.at<Vec3b>(j, i) = B.at<Vec3b>(j, i);
+        }
+    }
+    cout << "done!" << endl;
 
+    namedWindow("edge", WINDOW_NORMAL);
+    resizeWindow("edge", 600, 600);
+    imshow("edge", color);
     namedWindow("out", WINDOW_NORMAL);
     resizeWindow("out", 600, 600);
-    imshow("out", color);
+    imshow("out", out);
     waitKey(0);
 }
 
