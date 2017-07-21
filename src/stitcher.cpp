@@ -35,7 +35,6 @@ using namespace cv;
 using namespace cv::xfeatures2d;
 
 
-#define OVERLAP_FACTOR 0.545
 #define FOV_FACTOR 1.08
 #define THREAD_COUNT 8 
 #define FIXED_POINTS 4
@@ -57,7 +56,7 @@ Mat preview;
 static void help(char* progName)
 {
     cout << endl
-        <<  "This program stitches raw output of the Samsung Gear 360 together into a complete panorama"
+        <<  "This program stitches raw output of the Samsung Gear 360 together into a complete panorama" << endl
         <<  "Usage:"                                                                        << endl
         << progName << " [image_name ../img/example.jpg] " << endl << endl;
 }
@@ -259,24 +258,35 @@ void bundleAdjustment(Mat& src, double factor){
 }
 
 
-void joinImgs(Mat A, Mat B, Mat& out, int x, int y){
-    out.create(A.rows, A.cols*2 - x, A.type());
-    for (int i = 0; i < out.cols; i++){
-        for (int j = 0; j < out.rows; j++){
-            if ( i <  A.cols - x / 2){
-                out.at<Vec3b>(j, i) = A.at<Vec3b>(j, i);
-            } else if (j + y < B.rows && j + y >= 0){
-                out.at<Vec3b>(j, i) = B.at<Vec3b>(j + y, i - B.cols + x);
-            } else {
-                out.at<Vec3b>(j, i) = Vec3b(0,0,0);
-            }
+void joinImgs(Mat A, Mat B, Mat& out, int x){
+    Mat C;
+    A = A(Rect(0, 0, A.cols - x/2, A.rows));
+    B = B(Rect(x/2, 0, B.cols - x/2 ,B.rows));
+    hconcat(A, B, out);
+}
 
-        }
+
+Mat translateImg(Mat src, int y){
+    Mat res;
+    //y = -y;
+    if (y < 0){
+        src = src(Rect(0, -y, src.cols, src.rows + y));
+        Mat p(-y, src.cols, src.type());
+        vconcat(src, p, res);
+        return res;
+    } else if (y > 0) {
+        src = src(Rect(0, y, src.cols, src.rows - y));
+        Mat p(y, src.cols, src.type());
+        vconcat(p, src, res);
+        return res;
+    } else {
+        res = src(Rect(0, 0, src.cols, src.rows));
+        return res;
     }
 }
 
 
-Mat rotateImage(Mat src, double angle){
+Mat rotateImg(Mat src, double angle){
     Mat res;
     Point center = Point(src.cols/2, src.rows/2);
     Mat r = getRotationMatrix2D(center, angle, 1.0);
@@ -291,13 +301,21 @@ void adjustImg(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
     if(o_B.b != 1.00)
         bundleAdjustment(B, o_B.b);
     if(o_A.r != 0.00)
-        A = rotateImage(A, o_A.r);
+        A = rotateImg(A, o_A.r);
     if(o_B.r != 0.00)
-        B = rotateImage(B, o_B.r);
-    joinImgs(A, B, out, o_A.x, o_A.y);
+        B = rotateImg(B, o_B.r);
+    cout << "translating A" << endl;
+    if(o_A.y != 0)
+        A = translateImg(A, o_A.y);
+    cout << "translating B" << endl;
+    if(o_B.y != 0)
+        B = translateImg(B, o_B.y);
+    cout << "joining A to B" << endl;
+    joinImgs(A, B, out, o_A.x);
     Mat A2 = out(Rect(0, 0, out.cols/2, out.rows));
     Mat B2 = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
-    joinImgs(B2, A2, out, o_B.x, o_B.y);
+    cout << "joining B to A" << endl;
+    joinImgs(B2, A2, out, o_B.x);
     correctShift(out);
 } 
 
@@ -515,19 +533,35 @@ void fillMask(vector<vector<bool>>& mask, Point p){
     }
 }
 
+bool applyMask(Mat A, Mat B, vector<vector<bool>> mask, Mat& out){
+    if (A.rows != B.rows || A.cols != B.cols)
+        return false;
+    out.create(A.rows, A.cols, A.type());
+    for (int i = 0; i < out.cols; i++){
+        for (int j = 0; j < out.rows; j++){
+            if (!mask[j][i])
+                out.at<Vec3b>(j, i) = A.at<Vec3b>(j, i);
+            else
+                out.at<Vec3b>(j, i) = B.at<Vec3b>(j, i);
+        }
+    }
+    return true;
+}
 
-void stitch(Mat A, Mat B, Mat& out, int x, int y){
+void stitch(Mat A, Mat B, Mat& out, int x){
     //calculate and isolate overlap
-    A = A(Rect(A.cols-x/4*3, 0, x/2, A.rows));
-    B = B(Rect(x/4, 0, x/2, B.rows));
+    Mat A_extra, B_extra, temp, D, static_stitch;
+    A_extra = A(Rect(0, 0, A.cols - x, A.rows));
+    A = A(Rect(A.cols -x, 0, x, A.rows));
+    B_extra = B(Rect(x, 0, B.cols - x, B.rows));
+    B = B(Rect(0, 0, x, B.rows));
 
-    namedWindow("A2", WINDOW_NORMAL);
-    resizeWindow("A2", 600, 600);
-    imshow("A2", A);
-    namedWindow("B2", WINDOW_NORMAL);
-    resizeWindow("B2", 600, 600);
-    imshow("B2", B);
+    hconcat(A(Rect(0 , 0, A.cols/2, A.rows)), B(Rect(B.cols/2, 0, B.cols/2, B.rows)), static_stitch);
 
+    namedWindow("static_stitch", WINDOW_NORMAL);
+    resizeWindow("static_stitch", 600, 600);
+    imshow("static_stitch", static_stitch);
+    
     const int height = A.rows;
     const int width = A.cols;
     float* weights = new float[height * width];
@@ -554,15 +588,17 @@ void stitch(Mat A, Mat B, Mat& out, int x, int y){
         cout << "->"; 
         outputCoords(goal, width) ;
         cout << endl;
-        t[i] = thread(computePartialShortestPath, weights, height, width,
-                        start, goal, ref(partial_shortest_path[i]));
+        if (i < 3){
+            t[i] = thread(computePartialShortestPath, weights, height, width,
+                            start, goal, ref(partial_shortest_path[i]));
+        }
         start += update;
         goal += update;
         if (i == FIXED_POINTS - 2)
             goal -= width;
     }
     //join threads and combine partial solutions
-    for (int i = 0; i < FIXED_POINTS; i++){
+    for (int i = 0; i < 3; i++){
         t[i].join();
         for (int j = 0; j < (int)partial_shortest_path[i].size(); j++)
             shortest_path.push_back(partial_shortest_path[i][j]);
@@ -583,16 +619,13 @@ void stitch(Mat A, Mat B, Mat& out, int x, int y){
     }
 
     //apply mask to stitching edge
-    out.create(A.rows, A.cols, A.type());
     cout << "applying mask to transition..." << endl;
-    for (int i = 0; i < out.cols; i++){
-        for (int j = 0; j < out.rows; j++){
-            if (!mask[j][i])
-                out.at<Vec3b>(j, i) = A.at<Vec3b>(j, i);
-            else
-                out.at<Vec3b>(j, i) = B.at<Vec3b>(j, i);
-        }
-    }
+    Mat img[3];
+    applyMask(A, B, mask, img[1]);
+    img[0] = A_extra;
+    img[2] = B_extra;
+
+    hconcat(img, 3, out);
     cout << "done!" << endl;
 
     namedWindow("edge", WINDOW_NORMAL);
@@ -611,16 +644,17 @@ void joinAndStitch(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
     if(o_B.b != 1.00)
         bundleAdjustment(B, o_B.b);
     if(o_A.r != 0.00)
-        A = rotateImage(A, o_A.r);
+        A = rotateImg(A, o_A.r);
     if(o_B.r != 0.00)
-        B = rotateImage(B, o_B.r);
-    //joinImgs(B, A, out, o_A.x, o_A.y);
-    stitch(B, A, out, o_A.x, o_A.y);
-    Mat A2 = out(Rect(0, 0, out.cols/2, out.rows));
-    Mat B2 = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
-    //joinImgs(B2, A2, out, o_B.x, o_B.y);
-    stitch(B2, A2, out, o_B.x, o_B.y);
-    correctShift(out);
+        B = rotateImg(B, o_B.r);
+    if(o_A.y != 0)
+        A = translateImg(A, o_A.y);
+    if(o_B.y != 0)
+        B = translateImg(B, o_B.y);
+    stitch(A, B, out, o_A.x);
+    A = out(Rect(0, 0, out.cols/2, out.rows));
+    B = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
+    stitch(B, A, out, o_B.x);
 } 
 
 
@@ -680,7 +714,6 @@ int main( int argc, char* argv[])
     //hconcat(dst1, dst0, out);
 
     Orientation o_A, o_B;
-    //TODO: Scaling screws up when not set to 8
     interactImg(dst0, dst1, 4, o_A, o_B);
     joinAndStitch(dst0, dst1, o_A, o_B, out);
     //adjustImg(dst0, dst1, o_A, o_B, out);
