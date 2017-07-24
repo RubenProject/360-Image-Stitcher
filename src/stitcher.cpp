@@ -268,7 +268,6 @@ void joinImgs(Mat A, Mat B, Mat& out, int x){
 
 Mat translateImg(Mat src, int y){
     Mat res;
-    //y = -y;
     if (y < 0){
         src = src(Rect(0, -y, src.cols, src.rows + y));
         Mat p(-y, src.cols, src.type());
@@ -548,6 +547,33 @@ bool applyMask(Mat A, Mat B, vector<vector<bool>> mask, Mat& out){
     return true;
 }
 
+
+void calcRGBweights(float* weights, Mat A, Mat B){
+    const int height = A.rows;
+    const int width = A.cols;
+    for (int i = 0; i < width; i++){
+        for (int j = 0; j < height; j++){
+            weights[j * width + i] = euclidDist(A.at<Vec3b>(j, i), B.at<Vec3b>(j, i)); 
+        }
+    }
+
+}
+
+
+void calcHSVweights(float* weights, Mat A, Mat B){
+    const int height = A.rows;
+    const int width = A.cols;
+    Mat A_hsv, B_hsv;
+    cvtColor(A, A_hsv, COLOR_BGR2HSV);
+    cvtColor(B, B_hsv, COLOR_BGR2HSV);
+    for (int i = 0; i < width; i++){
+        for (int j = 0; j < height; j++){
+            weights[j * width + i] = euclidDist(A_hsv.at<Vec3b>(j, i), B_hsv.at<Vec3b>(j, i)); 
+        }
+    }
+}
+
+
 void stitch(Mat A, Mat B, Mat& out, int x){
     //calculate and isolate overlap
     Mat A_extra, B_extra, temp, D, static_stitch;
@@ -566,13 +592,15 @@ void stitch(Mat A, Mat B, Mat& out, int x){
     const int width = A.cols;
     float* weights = new float[height * width];
 
-    for (int i = 0; i < width; i++){
-        for (int j = 0; j < height; j++){
-            weights[j * width + i] = euclidDist(A.at<Vec3b>(j, i), B.at<Vec3b>(j, i)); 
-        }
-    }
+    cout << "RGB" << endl;
+    calcRGBweights(weights, A, B);
     Mat C(height, width, CV_32FC1, weights);
     displayGrayMap(C);
+
+    cout << "HSV" << endl;
+    calcHSVweights(weights, A, B);
+    Mat C_2(height, width, CV_32FC1, weights);
+    displayGrayMap(C_2);
 
     //find shortest path from top to bottom through mat C
     vector<Point> shortest_path;
@@ -655,6 +683,7 @@ void joinAndStitch(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
     A = out(Rect(0, 0, out.cols/2, out.rows));
     B = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
     stitch(B, A, out, o_B.x);
+    correctShift(out);
 } 
 
 
