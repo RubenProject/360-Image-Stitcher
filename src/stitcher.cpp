@@ -666,6 +666,15 @@ void stitch(Mat A, Mat B, Mat& out, int x){
 }
 
 
+void blurTransition(Mat A, Mat B, Mat& out, int x){
+    Mat C;
+    A = A(Rect(0, 0, A.cols - x/2, A.rows));
+    B = B(Rect(x/2, 0, B.cols - x/2 ,B.rows));
+    hconcat(A, B, out);
+    GaussianBlur(src, dst,Size(4,4), 0, 0);
+}
+
+
 void joinAndStitch(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
     if(o_A.b != 1.00)
         bundleAdjustment(A, o_A.b);
