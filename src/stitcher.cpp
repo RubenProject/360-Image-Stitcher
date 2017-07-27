@@ -35,6 +35,7 @@ using namespace cv;
 using namespace cv::xfeatures2d;
 
 
+#define TIME_OUT 60
 #define FOV_FACTOR 1.08
 #define THREAD_COUNT 8 
 #define FIXED_POINTS 4
@@ -49,7 +50,7 @@ struct Orientation {
 };
 
 bool MANUAL_POSITIONING_DONE;
-float ASTAR_PROGRESS;
+bool ASTAR_PROGRESS[FIXED_POINTS];
 Mat preview;
 
 
@@ -303,18 +304,14 @@ void adjustImg(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
         A = rotateImg(A, o_A.r);
     if(o_B.r != 0.00)
         B = rotateImg(B, o_B.r);
-    cout << "translating A" << endl;
     if(o_A.y != 0)
         A = translateImg(A, o_A.y);
-    cout << "translating B" << endl;
     if(o_B.y != 0)
         B = translateImg(B, o_B.y);
-    cout << "joining A to B" << endl;
     joinImgs(A, B, out, o_A.x);
-    Mat A2 = out(Rect(0, 0, out.cols/2, out.rows));
-    Mat B2 = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
-    cout << "joining B to A" << endl;
-    joinImgs(B2, A2, out, o_B.x);
+    A = out(Rect(0, 0, out.cols/2, out.rows));
+    B = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
+    joinImgs(B, A, out, o_B.x);
     correctShift(out);
 } 
 
@@ -509,7 +506,7 @@ void outputCoords(int c, int width){
 
 void computePartialShortestPath(const float* weights, const int height, const int width,
                                 const int start, const int goal,
-                                vector<Point>& shortest_path){
+                                vector<Point>& shortest_path, int threadnr){
     int* paths = new int[height * width];
     if (astar(weights, height, width, start, goal, paths)){
         int cur = goal;
@@ -518,9 +515,20 @@ void computePartialShortestPath(const float* weights, const int height, const in
             shortest_path.push_back(Point(cur % width, cur / width));
         }
     }
-    ASTAR_PROGRESS += 100 / FIXED_POINTS;
-    cout << ASTAR_PROGRESS << "%" << endl;
+    ASTAR_PROGRESS[threadnr] = true;
+    cout << "thread " << threadnr << " finished!" << endl;
+}
 
+
+void checkPathIntegrity(vector<Point>& path, int height, int width){
+    vector<bool> rowFilled(height, false);
+    for (int i = 0; i < (int)path.size(); i++)
+        rowFilled[path[i].y] = true;
+
+    for (int i = 0; i < (int)rowFilled.size(); i++){
+        if (rowFilled[i] == false)
+            path.push_back(Point(width/2, i));
+    }
 }
 
 
@@ -556,7 +564,6 @@ void calcRGBweights(float* weights, Mat A, Mat B){
             weights[j * width + i] = euclidDist(A.at<Vec3b>(j, i), B.at<Vec3b>(j, i)); 
         }
     }
-
 }
 
 
@@ -574,6 +581,25 @@ void calcHSVweights(float* weights, Mat A, Mat B){
 }
 
 
+//returns true if threads finished correctly
+bool monitorThreads(){
+    double t_start = (double)getTickCount();
+    double t_cur = 0;
+    bool stop = false;
+    while (!stop){
+        t_cur = ((double)getTickCount() - t_start)/getTickFrequency();
+        stop = true;
+        for (int i = 0; i < FIXED_POINTS; i++){
+            if (!ASTAR_PROGRESS[i])
+                stop = false;
+        }
+        if (t_cur > TIME_OUT)
+           return false; 
+    }
+    return true;
+}
+
+
 void stitch(Mat A, Mat B, Mat& out, int x){
     //calculate and isolate overlap
     Mat A_extra, B_extra, temp, D, static_stitch;
@@ -581,7 +607,7 @@ void stitch(Mat A, Mat B, Mat& out, int x){
     A = A(Rect(A.cols -x, 0, x, A.rows));
     B_extra = B(Rect(x, 0, B.cols - x, B.rows));
     B = B(Rect(0, 0, x, B.rows));
-
+    
     hconcat(A(Rect(0 , 0, A.cols/2, A.rows)), B(Rect(B.cols/2, 0, B.cols/2, B.rows)), static_stitch);
 
     namedWindow("static_stitch", WINDOW_NORMAL);
@@ -612,25 +638,40 @@ void stitch(Mat A, Mat B, Mat& out, int x){
     //start worker threads with the specified amount of fixed points along the symmetry axis
     cout << "calculating shortest path..." << endl;
     for (int i = 0; i < FIXED_POINTS; i++){
+        ASTAR_PROGRESS[i] = false;
+        cout << "starting thread " << i << ": ";
         outputCoords(start, width);
         cout << "->"; 
         outputCoords(goal, width) ;
         cout << endl;
-        if (i < 3){
-            t[i] = thread(computePartialShortestPath, weights, height, width,
-                            start, goal, ref(partial_shortest_path[i]));
-        }
+        t[i] = thread(computePartialShortestPath, weights, height, width,
+                        start, goal, ref(partial_shortest_path[i]), i);
         start += update;
         goal += update;
         if (i == FIXED_POINTS - 2)
             goal -= width;
     }
-    //join threads and combine partial solutions
-    for (int i = 0; i < 3; i++){
-        t[i].join();
-        for (int j = 0; j < (int)partial_shortest_path[i].size(); j++)
-            shortest_path.push_back(partial_shortest_path[i][j]);
+
+    if (!monitorThreads())
+        cout << "threads timed out after " << TIME_OUT << " seconds." << endl;
+    else
+        cout << "threads finished correctly" << endl;
+    
+
+    //kill threads and combine partial solutions
+    for (int i = 0; i < FIXED_POINTS; i++){
+        if (ASTAR_PROGRESS[i]){
+            t[i].join();
+            for (int j = 0; j < (int)partial_shortest_path[i].size(); j++)
+                shortest_path.push_back(partial_shortest_path[i][j]);
+        } else {
+            cout << "thread " << i << " failed to complete in time." << endl;
+            t[i].detach();
+            t[i].~thread();
+        }
     }
+
+
     //display the found path with E X T R A T H I C C line
     Mat color;
     cvtColor(C, color, COLOR_GRAY2BGR);
@@ -639,6 +680,11 @@ void stitch(Mat A, Mat B, Mat& out, int x){
         color.at<Vec3f>(shortest_path[i].y, shortest_path[i].x) = Vec3f(0, 0, 255);
         color.at<Vec3f>(shortest_path[i].y, shortest_path[i].x+1) = Vec3f(0, 0, 255);
     }
+
+    //fill in any empty rows by setting a flag in the middle of the screen
+    if ((int)shortest_path.size() != height)
+        checkPathIntegrity(shortest_path, height, width);
+
     //make a mask for the transition
     vector<vector<bool>> mask(height, vector<bool>(width, false));
     cout << "creating mask for transition..." << endl;
@@ -667,11 +713,34 @@ void stitch(Mat A, Mat B, Mat& out, int x){
 
 
 void blurTransition(Mat A, Mat B, Mat& out, int x){
-    Mat C;
+    const int DIVISIONS = 5;
+    Mat C, D[DIVISIONS + 2], E[DIVISIONS + 2];
     A = A(Rect(0, 0, A.cols - x/2, A.rows));
     B = B(Rect(x/2, 0, B.cols - x/2 ,B.rows));
-    hconcat(A, B, out);
-    GaussianBlur(src, dst,Size(4,4), 0, 0);
+    hconcat(A, B, C);
+    int width = C.cols;
+    int blurwidth = 400;
+
+
+    D[0] = C(Rect(0, 0, (width - blurwidth) / 2, C.rows));
+    for (int i = 0; i < DIVISIONS; i++)
+        D[i+1] = C(Rect((width - blurwidth) / 2 + blurwidth / DIVISIONS * i, 0, blurwidth / DIVISIONS, C.rows));
+    D[DIVISIONS + 1] = C(Rect(width - (width - blurwidth) / 2, 0, (width - blurwidth) / 2, C.rows));
+
+    E[0] = D[0];
+
+    int k = 3;//kernel size
+    for (int i = 0; i < DIVISIONS; i++){
+        GaussianBlur(D[i + 1], E[i + 1], Size(k, k), 0, 0);
+        if (i < DIVISIONS)
+            k += 8;
+        else 
+            k -= 8;
+    }
+    E[DIVISIONS + 1] = D[DIVISIONS + 1];
+    
+    hconcat(E, DIVISIONS + 2, out);
+    cout << "succes" << endl;
 }
 
 
@@ -689,9 +758,11 @@ void joinAndStitch(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
     if(o_B.y != 0)
         B = translateImg(B, o_B.y);
     stitch(A, B, out, o_A.x);
+    //blurTransition(A, B, out, o_A.x);
     A = out(Rect(0, 0, out.cols/2, out.rows));
     B = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
     stitch(B, A, out, o_B.x);
+    //blurTransition(B, A, out, o_B.x);
     correctShift(out);
 } 
 
