@@ -49,6 +49,7 @@ struct Orientation {
     double r, b, s;
 };
 
+bool SIG_STOP;
 bool MANUAL_POSITIONING_DONE;
 bool ASTAR_PROGRESS[FIXED_POINTS];
 Mat preview;
@@ -515,8 +516,10 @@ void computePartialShortestPath(const float* weights, const int height, const in
             shortest_path.push_back(Point(cur % width, cur / width));
         }
     }
-    ASTAR_PROGRESS[threadnr] = true;
-    cout << "thread " << threadnr << " finished!" << endl;
+    if (!SIG_STOP){
+        ASTAR_PROGRESS[threadnr] = true;
+        cout << "thread " << threadnr << " finished!" << endl;
+    }
 }
 
 
@@ -585,16 +588,18 @@ void calcHSVweights(float* weights, Mat A, Mat B){
 bool monitorThreads(){
     double t_start = (double)getTickCount();
     double t_cur = 0;
-    bool stop = false;
-    while (!stop){
+    while (!SIG_STOP){
         t_cur = ((double)getTickCount() - t_start)/getTickFrequency();
-        stop = true;
+        bool threads_finished = true;
         for (int i = 0; i < FIXED_POINTS; i++){
             if (!ASTAR_PROGRESS[i])
-                stop = false;
+                threads_finished = false;
         }
-        if (t_cur > TIME_OUT)
-           return false; 
+        SIG_STOP = threads_finished;
+        if (t_cur > TIME_OUT){
+            SIG_STOP = true;
+            return false; 
+        }
     }
     return true;
 }
@@ -603,10 +608,10 @@ bool monitorThreads(){
 void stitch(Mat A, Mat B, Mat& out, int x){
     //calculate and isolate overlap
     Mat A_extra, B_extra, temp, D, static_stitch;
-    A_extra = A(Rect(0, 0, A.cols - x, A.rows));
-    A = A(Rect(A.cols -x, 0, x, A.rows));
-    B_extra = B(Rect(x, 0, B.cols - x, B.rows));
-    B = B(Rect(0, 0, x, B.rows));
+    A_extra = A(Rect(0, 0, A.cols - x/4*3, A.rows));
+    A = A(Rect(A.cols -x/4*3, 0, x/2, A.rows));
+    B_extra = B(Rect(x/4*3, 0, B.cols - x/4*3, B.rows));
+    B = B(Rect(x/4, 0, x/2, B.rows));
     
     hconcat(A(Rect(0 , 0, A.cols/2, A.rows)), B(Rect(B.cols/2, 0, B.cols/2, B.rows)), static_stitch);
 
@@ -637,6 +642,7 @@ void stitch(Mat A, Mat B, Mat& out, int x){
     thread t[FIXED_POINTS];
     //start worker threads with the specified amount of fixed points along the symmetry axis
     cout << "calculating shortest path..." << endl;
+    SIG_STOP = false;
     for (int i = 0; i < FIXED_POINTS; i++){
         ASTAR_PROGRESS[i] = false;
         cout << "starting thread " << i << ": ";
@@ -656,7 +662,6 @@ void stitch(Mat A, Mat B, Mat& out, int x){
         cout << "threads timed out after " << TIME_OUT << " seconds." << endl;
     else
         cout << "threads finished correctly" << endl;
-    
 
     //kill threads and combine partial solutions
     for (int i = 0; i < FIXED_POINTS; i++){
@@ -666,11 +671,9 @@ void stitch(Mat A, Mat B, Mat& out, int x){
                 shortest_path.push_back(partial_shortest_path[i][j]);
         } else {
             cout << "thread " << i << " failed to complete in time." << endl;
-            t[i].detach();
-            t[i].~thread();
+            t[i].join();
         }
     }
-
 
     //display the found path with E X T R A T H I C C line
     Mat color;

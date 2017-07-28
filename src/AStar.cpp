@@ -11,6 +11,8 @@ class Node {
     Node(int i, float c) : idx(i),cost(c) {}
 };
 
+extern bool SIG_STOP;
+
 // the top of the priority queue is the greatest element by default,
 // but we want the smallest, so flip the sign
 bool operator<(const Node &n1, const Node &n2) {
@@ -45,10 +47,10 @@ bool astar(const float* weights, const int height, const int width,
   std::priority_queue<Node> nodes_to_visit; 
   nodes_to_visit.push(start_node);
 
-  int* nbrs = new int[4];
+  int* nbrs = new int[3];
 
   bool solution_found = false;
-  while (!nodes_to_visit.empty()) {
+  while (!nodes_to_visit.empty() && !SIG_STOP) {
     // .top() doesn't actually remove the node
     Node cur = nodes_to_visit.top();
 
@@ -60,11 +62,11 @@ bool astar(const float* weights, const int height, const int width,
     nodes_to_visit.pop();
 
     // check bounds and find up to four neighbors
-    nbrs[0] = (cur.idx / width > 0) ? (cur.idx - width) : -1;
-    nbrs[1] = (cur.idx % width > 0) ? (cur.idx - 1) : -1;
-    nbrs[2] = (cur.idx / width + 1 < height) ? (cur.idx + width) : -1;
-    nbrs[3] = (cur.idx % width + 1 < width) ? (cur.idx + 1) : -1;
-    for (int i = 0; i < 4; ++i) {
+    //nbrs[0] = (cur.idx / width > 0) ? (cur.idx - width) : -1;
+    nbrs[0] = (cur.idx % width > 0) ? (cur.idx - 1) : -1;
+    nbrs[1] = (cur.idx / width + 1 < height) ? (cur.idx + width) : -1;
+    nbrs[2] = (cur.idx % width + 1 < width) ? (cur.idx + 1) : -1;
+    for (int i = 0; i < 3; ++i) {
       if (nbrs[i] >= 0) {
         // the sum of the cost so far and the cost of this move
         float new_cost = costs[cur.idx] + weights[nbrs[i]];
