@@ -1,15 +1,13 @@
+#ifndef astarCCVar  
+#define astarCCVar
+
 #include <queue>
 #include <limits>
 #include <cmath>
 
-// represents a single pixel
-class Node {
-  public:
-    int idx;     // index in the flattened grid
-    float cost;  // cost of traversing this pixel
+#include "astar.hpp"
 
-    Node(int i, float c) : idx(i),cost(c) {}
-};
+using namespace std;
 
 extern bool SIG_STOP;
 
@@ -89,3 +87,5 @@ bool astar(const float* weights, const int height, const int width,
 
   return solution_found;
 }
+
+#endif

@@ -2,15 +2,27 @@ CXX ?= g++
 
 CXXFLAGS += -c -Wall -std=c++11 $(shell pkg-config --cflags opencv)
 LDFLAGS += $(shell pkg-config --libs --static opencv)
-OBJS = AStar.o stitcher.o
+OBJS = astar.o projection.o imgops.o stitcher.o manual.o main.o
 
-stitcher: $(OBJS)
-	$(CXX) $(OBJS) -o stitcher $(LDFLAGS)
+main: $(OBJS)
+	$(CXX) $(OBJS) -o stitch $(LDFLAGS)
 
-AStar.o: AStar.cpp AStar.hpp
-	$(CXX) $(CXXFLAGS) AStar.cpp
+manual.o: manual.cpp manual.hpp orientation.hpp
+	$(CXX) $(CXXFLAGS) manual.cpp
 
-stitcher.o: stitcher.cpp AStar.hpp
-	$(CXX) stitcher.cpp $(CXXFLAGS)
+imgops.o: imgops.cpp imgops.hpp
+	$(CXX) $(CXXFLAGS) imgops.cpp
 
-clean: ; rm -f stitcher.o astar.o stitcher
+projection.o: projection.cpp projection.hpp
+	$(CXX) $(CXXFLAGS) projection.cpp
+
+astar.o: astar.cpp astar.hpp
+	$(CXX) $(CXXFLAGS) astar.cpp
+
+stitcher.o: stitcher.cpp stitcher.hpp astar.hpp projection.hpp imgops.hpp manual.hpp orientation.hpp
+	$(CXX) $(CXXFLAGS) stitcher.cpp
+
+main.o: main.cpp stitcher.hpp projection.hpp imgops.hpp manual.hpp orientation.hpp
+	$(CXX) $(CXXFLAGS) main.cpp 
+
+clean: ; rm -f stitcher.o astar.o projection.o imgops.o manual.o main.o astar.o program
