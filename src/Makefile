@@ -28,4 +28,4 @@ stitcher.o: stitcher.cpp stitcher.hpp poisson.hpp astar.hpp projection.hpp imgop
 main.o: main.cpp stitcher.hpp projection.hpp imgops.hpp manual.hpp orientation.hpp
 	$(CXX) $(CXXFLAGS) main.cpp 
 
-clean: ; rm -f stitcher.o poisson.o astar.o projection.o imgops.o manual.o main.o astar.o program
+clean: ; rm -f stitcher.o poisson.o astar.o projection.o imgops.o manual.o main.o astar.o stitch

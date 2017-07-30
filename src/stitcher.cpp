@@ -455,7 +455,7 @@ void blend(Mat A, Mat B, Mat& out, int x){
     Mat in1, in2, img1, img2;
     Mat blended;
 
-    int overlap = 30;
+    int overlap = 20;
     in1 = A(Rect(A.cols - x/2 - overlap / 2, 0, overlap, A.rows));
     A = A(Rect(0, 0, A.cols - x/2, A.rows));
     B = B(Rect(x/2, 0, B.cols - x/2 ,B.rows));

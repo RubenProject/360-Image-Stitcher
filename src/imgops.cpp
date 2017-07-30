@@ -1,13 +1,34 @@
 #ifndef imgopsCCVar
 #define imgopsCCVar
 
+#include <vector>
+#include <iostream>
+
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 
 #include "imgops.hpp"
 
 using namespace std;
-using namespace cv;
+
+Mat equalize(Mat src){
+    if(src.channels() >= 3){
+        Mat ycrcb;
+        cvtColor(src, ycrcb, CV_BGR2YCrCb);
+
+        vector<Mat> channels;
+        split(ycrcb,channels);
+
+        equalizeHist(channels[0], channels[0]);
+
+        Mat result;
+        merge(channels,ycrcb);
+        cvtColor(ycrcb,result,CV_YCrCb2BGR);
+
+        return result;
+    }
+    return Mat();
+}
 
 
 //corrects the shift present after projection

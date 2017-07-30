@@ -27,23 +27,25 @@ int main( int argc, char* argv[])
     help(argv[0]);
     const char* filename = argc >=2 ? argv[1] : "../img/original/360_0042.JPG";
 
-    Mat src, A, B, out;
+    Mat src, A_fish, B_fish, A, B, out;
 
     src = imread(filename, IMREAD_COLOR);
 
-    if (src.empty())
-    {
+    if (src.empty()){
         cerr << "Can't open image ["  << filename << "]" << endl;
         return -1;
     }
 
-    Mat cut0 = src(Rect(0, 0, src.rows, src.cols/2));
-    Mat cut1 = src(Rect(src.cols/2, 0, src.rows, src.cols/2));
+    A_fish = src(Rect(0, 0, src.rows, src.cols/2));
+    B_fish = src(Rect(src.cols/2, 0, src.rows, src.cols/2));
+
+    A_fish = equalize(A_fish);
+    B_fish = equalize(B_fish);
 
     double t = (double)getTickCount();
 
-    fishToSquare_threaded(cut0, A);
-    fishToSquare_threaded(cut1, B);
+    fishToSquare_threaded(A_fish, A);
+    fishToSquare_threaded(B_fish, B);
 
     correctShift(A);
     correctShift(B);

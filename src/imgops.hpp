@@ -1,8 +1,9 @@
 #ifndef imgopsHVar
 #define imgopsHVar
 
-using namespace std;
 using namespace cv;
+
+Mat equalize(Mat src);
 
 void correctShift(Mat& img);
 
