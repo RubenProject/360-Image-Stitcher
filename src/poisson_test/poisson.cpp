@@ -1,6 +1,3 @@
-#ifndef poissonCCVar
-#define poissonCCVar
-
 // Poisson Blending
 // Using stupid way (just solving Ax = b)
 // Author: Eric Yuan
@@ -17,8 +14,6 @@
 #include "opencv2/highgui/highgui.hpp"
 #include <math.h>
 #include <iostream>
-
-#include "poisson.hpp"
 
 using namespace cv;
 using namespace std;
@@ -235,18 +230,57 @@ poisson_blending(Mat &img1, Mat &img2, Rect ROI, int posX, int posY){
     //Br = getB2(rgb1[0], rgb2[0], posX, posY, ROI);
     res = getResult(A, Br, ROI);
     result.push_back(res);
+    cout<<"R channel finished..."<<endl;
     Bg = getB1(rgb1[1], rgb2[1], posX, posY, ROI);
     //Bg = getB2(rgb1[1], rgb2[1], posX, posY, ROI);
     res = getResult(A, Bg, ROI);
     result.push_back(res);
+    cout<<"G channel finished..."<<endl;
     Bb = getB1(rgb1[2], rgb2[2], posX, posY, ROI);
     //Bb = getB2(rgb1[2], rgb2[2], posX, posY, ROI);
     res = getResult(A, Bb, ROI);
     result.push_back(res);
+    cout<<"B channel finished..."<<endl;
 
     // merge the 3 gray images into a 3-channel image 
     merge(result,merged);
     return merged; 
 }
 
-#endif
+int 
+main(int argc, char** argv)
+{
+    long start, end;
+    start = clock();
+
+    Mat img1, img2;
+    Mat in1 = imread("cat.png");
+    Mat in2 = imread("ocean.jpg");
+    imshow("src", in1);
+    imshow("dst", in2);
+    in1.convertTo(img1, CV_64FC3);
+    in2.convertTo(img2, CV_64FC3);
+
+    cout << in1.cols << ", " << in1.rows << endl;
+    cout << in2.cols << ", " << in2.rows << endl;
+    Mat result, roimat;
+    Rect rc, rc2;
+    rc = Rect(50, 50, 50, 50);
+    result = poisson_blending(img1, img2, rc, 1, 1);
+    result.convertTo(result, CV_8UC1);
+    rc2 = Rect(50, 50, 50, 50);
+    roimat = in2(rc2);
+    imshow("roimat", roimat);    
+    result.copyTo(roimat);
+
+    end = clock();
+    cout<<"used time: "<<((double)(end - start)) / CLOCKS_PER_SEC<<" second"<<endl;
+    imshow("roi", result);
+    imshow("result", in2);
+
+    imwrite("seacat.jpg", in2);
+
+    waitKey(0);
+    return 0;
+}
+

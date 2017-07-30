@@ -59,7 +59,6 @@ Mat translateImg(Mat src, int y){
 
 
 void joinImgs(Mat A, Mat B, Mat& out, int x){
-    Mat C;
     A = A(Rect(0, 0, A.cols - x/2, A.rows));
     B = B(Rect(x/2, 0, B.cols - x/2 ,B.rows));
     hconcat(A, B, out);

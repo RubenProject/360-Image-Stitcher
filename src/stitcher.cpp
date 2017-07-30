@@ -23,6 +23,7 @@
 #include "projection.hpp"
 #include "imgops.hpp"
 #include "manual.hpp"
+#include "poisson.hpp"
 
 #include "stitcher.hpp"
 
@@ -447,5 +448,80 @@ void joinAndStitch(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
     //blurTransition(B, A, out, o_B.x);
     correctShift(out);
 } 
+
+
+void blend(Mat A, Mat B, Mat& out, int x){
+
+    Mat in1, in2, img1, img2;
+    Mat blended;
+
+    int overlap = 30;
+    in1 = A(Rect(A.cols - x/2 - overlap / 2, 0, overlap, A.rows));
+    A = A(Rect(0, 0, A.cols - x/2, A.rows));
+    B = B(Rect(x/2, 0, B.cols - x/2 ,B.rows));
+    hconcat(A, B, in2);
+
+    Mat img_all[3];
+    img_all[0] = in2(Rect(0, 0, in2.cols/4*3, in2.rows));
+    img_all[2] = in2(Rect(in2.cols - in2.cols/4*3, 0, in2.cols/4*3, in2.rows));
+    
+    in2 = in2(Rect(in2.cols/8*3, 0, in2.cols/4, in2.rows));
+
+    namedWindow("before", WINDOW_NORMAL);
+    resizeWindow("before", 600, 600);
+    imshow("before", in2);
+    
+    in1.convertTo(img1, CV_64FC3);
+    in2.convertTo(img2, CV_64FC3);
+
+    int x1 = in2.cols/2 - overlap / 2;
+    int height = in2.rows;
+
+    for (int i = 1; i < height / overlap; i++){
+        Rect rc(0, i * overlap, overlap, overlap);
+        blended = poisson_blending(img1, img2, rc, x1, i * overlap);
+        blended.convertTo(blended, CV_8UC1);
+        //the area you want to copy to
+        //this trick works because creating a smaller mat from a bigger one 
+        //does not copy the data it simply points to it...
+        Rect rc2(x1, i * overlap, overlap, overlap);
+        Mat roimat = in2(rc2);
+        blended.copyTo(roimat);
+        cout << "blending progress: " 
+            << (float)i / ((height / overlap) - 1) * 100 
+            << "%" << endl;
+    }
+
+    img_all[1] = in2;
+
+    hconcat(img_all, 3, out);
+
+    namedWindow("after", WINDOW_NORMAL);
+    resizeWindow("after", 600, 600);
+    imshow("after", img_all[1]);
+    waitKey();
+}
+
+
+//will it blend?
+void joinAndBlend(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
+    if(o_A.b != 1.00)
+        bundleAdjustment(A, o_A.b);
+    if(o_B.b != 1.00)
+        bundleAdjustment(B, o_B.b);
+    if(o_A.r != 0.00)
+        A = rotateImg(A, o_A.r);
+    if(o_B.r != 0.00)
+        B = rotateImg(B, o_B.r);
+    if(o_A.y != 0)
+        A = translateImg(A, o_A.y);
+    if(o_B.y != 0)
+        B = translateImg(B, o_B.y);
+    blend(A, B, out, o_A.x);
+    A = out(Rect(0, 0, out.cols/2, out.rows));
+    B = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
+    blend(B, A, out, o_B.x);
+    correctShift(out);
+}
 
 #endif

@@ -7,7 +7,6 @@
 #include "projection.hpp"
 #include "imgops.hpp"
 #include "manual.hpp"
-
 #include "stitcher.hpp"
 
 using namespace std;
@@ -23,21 +22,14 @@ static void help(char* progName)
 }
 
 
-
 int main( int argc, char* argv[])
 {
     help(argv[0]);
-    const char* filename = argc >=2 ? argv[1] : "../img/original/360_0026.JPG";
+    const char* filename = argc >=2 ? argv[1] : "../img/original/360_0042.JPG";
 
-    Mat src, dst0, dst1, out;
+    Mat src, A, B, out;
 
-    if (argc >= 3 && !strcmp("G", argv[2])){
-        cout << "gray" << endl;
-        src = imread( filename, IMREAD_GRAYSCALE);
-    } else {
-        cout << "color" << endl;
-        src = imread( filename, IMREAD_COLOR);
-    }
+    src = imread(filename, IMREAD_COLOR);
 
     if (src.empty())
     {
@@ -50,19 +42,20 @@ int main( int argc, char* argv[])
 
     double t = (double)getTickCount();
 
-    fishToSquare_threaded(cut0, dst0);
-    fishToSquare_threaded(cut1, dst1);
+    fishToSquare_threaded(cut0, A);
+    fishToSquare_threaded(cut1, B);
 
-    correctShift(dst0);
-    correctShift(dst1);
+    correctShift(A);
+    correctShift(B);
 
     t = ((double)getTickCount() - t)/getTickFrequency();
     cout << "Image transformed in " << t <<" seconds" << endl;
 
     Orientation o_A, o_B;
-    interactImg(dst0, dst1, 4, o_A, o_B);
-    joinAndStitch(dst0, dst1, o_A, o_B, out);
-    //adjustImg(dst0, dst1, o_A, o_B, out);
+    interactImg(A, B, 4, o_A, o_B);
+    joinAndBlend(A, B, o_A, o_B, out);
+    //joinAndStitch(A, B, o_A, o_B, out);
+    //adjustImg(A, B, o_A, o_B, out);
 
     string outputFileName(filename);
     outputFileName = outputFileName.substr(outputFileName.length() - 12);
