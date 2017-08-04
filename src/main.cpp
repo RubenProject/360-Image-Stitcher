@@ -55,9 +55,10 @@ int main( int argc, char* argv[])
 
     Orientation o_A, o_B;
     interactImg(A, B, 4, o_A, o_B);
-    joinAndBlend(A, B, o_A, o_B, out);
+    //joinAndBlend(A, B, o_A, o_B, out);
     //joinAndStitch(A, B, o_A, o_B, out);
-    //adjustImg(A, B, o_A, o_B, out);
+    adjustImg(A, B, o_A, o_B, out);
+
 
     string outputFileName(filename);
     outputFileName = outputFileName.substr(outputFileName.length() - 12);

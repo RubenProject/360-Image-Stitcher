@@ -5,6 +5,7 @@
 #include <iostream>
 
 #include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
 #include "imgops.hpp"
@@ -12,19 +13,20 @@
 using namespace std;
 
 Mat equalize(Mat src){
+    imwrite("not_equalized.jpg", src);
     if(src.channels() >= 3){
-        Mat ycrcb;
-        cvtColor(src, ycrcb, CV_BGR2YCrCb);
+        Mat hsv;
+        cvtColor(src, hsv, CV_BGR2HSV);
 
         vector<Mat> channels;
-        split(ycrcb,channels);
+        split(hsv,channels);
 
         equalizeHist(channels[0], channels[0]);
 
         Mat result;
-        merge(channels,ycrcb);
-        cvtColor(ycrcb,result,CV_YCrCb2BGR);
-
+        merge(channels,result);
+        cvtColor(hsv, result, CV_HSV2BGR);
+        imwrite("equalized.jpg", result);
         return result;
     }
     return Mat();

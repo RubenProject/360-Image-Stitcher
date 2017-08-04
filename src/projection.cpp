@@ -5,6 +5,9 @@
 #include <thread>
 
 #include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+
+#include "imgops.hpp"
 
 #include "projection.hpp"
 
