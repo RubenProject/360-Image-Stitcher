@@ -55,11 +55,20 @@ int main( int argc, char* argv[])
 
     Orientation o_A, o_B;
     interactImg(A, B, 4, o_A, o_B);
-    //joinAndBlend(A, B, o_A, o_B, out);
+
+    t = (double)getTickCount();
+    //joinAndBlur(A, B, o_A, o_B, out);
+    joinAndBlend(A, B, o_A, o_B, out);
     //joinAndStitch(A, B, o_A, o_B, out);
-    adjustImg(A, B, o_A, o_B, out);
+    //adjustImg(A, B, o_A, o_B, out);
+    t = ((double)getTickCount() - t)/getTickFrequency();
+    cout << "Image transformed in " << t <<" seconds" << endl;
 
 
+    //namedWindow("out", WINDOW_NORMAL);
+    //resizeWindow("out", 600, 600);
+    //imshow("out", out);
+    //waitKey(0);
     string outputFileName(filename);
     outputFileName = outputFileName.substr(outputFileName.length() - 12);
     outputFileName = "../img/result/" + outputFileName;

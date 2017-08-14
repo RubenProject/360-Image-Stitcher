@@ -294,6 +294,8 @@ void stitch(Mat A, Mat B, Mat& out, int x){
     B_extra = B(Rect(x/4*3, 0, B.cols - x/4*3, B.rows));
     B = B(Rect(x/4, 0, x/2, B.rows));
     
+    imwrite("A.jpg", A);
+    imwrite("B.jpg", B);
     hconcat(A(Rect(0 , 0, A.cols/2, A.rows)), B(Rect(B.cols/2, 0, B.cols/2, B.rows)), static_stitch);
 
     namedWindow("static_stitch", WINDOW_NORMAL);
@@ -309,10 +311,10 @@ void stitch(Mat A, Mat B, Mat& out, int x){
     Mat C(height, width, CV_32FC1, weights);
     displayGrayMap(C);
 
-    cout << "HSV" << endl;
-    calcHSVweights(weights, A, B);
-    Mat C_2(height, width, CV_32FC1, weights);
-    displayGrayMap(C_2);
+    //cout << "HSV" << endl;
+    //calcHSVweights(weights, A, B);
+    //Mat C(height, width, CV_32FC1, weights);
+    //displayGrayMap(C);
 
     //find shortest path from top to bottom through mat C
     vector<Point> shortest_path;
@@ -397,7 +399,7 @@ void stitch(Mat A, Mat B, Mat& out, int x){
 
 
 void blurTransition(Mat A, Mat B, Mat& out, int x){
-    const int DIVISIONS = 5;
+    const int DIVISIONS = 7;
     Mat C, D[DIVISIONS + 2], E[DIVISIONS + 2];
     A = A(Rect(0, 0, A.cols - x/2, A.rows));
     B = B(Rect(x/2, 0, B.cols - x/2 ,B.rows));
@@ -410,16 +412,17 @@ void blurTransition(Mat A, Mat B, Mat& out, int x){
     for (int i = 0; i < DIVISIONS; i++)
         D[i+1] = C(Rect((width - blurwidth) / 2 + blurwidth / DIVISIONS * i, 0, blurwidth / DIVISIONS, C.rows));
     D[DIVISIONS + 1] = C(Rect(width - (width - blurwidth) / 2, 0, (width - blurwidth) / 2, C.rows));
-
     E[0] = D[0];
 
-    int k = 3;//kernel size
+
+    int k = 17;//kernel size
     for (int i = 0; i < DIVISIONS; i++){
         GaussianBlur(D[i + 1], E[i + 1], Size(k, k), 0, 0);
-        if (i < DIVISIONS)
-            k += 8;
+        if (i < DIVISIONS/2)
+            k += 20;
         else 
-            k -= 8;
+            k -= 20;
+        
     }
     E[DIVISIONS + 1] = D[DIVISIONS + 1];
     
@@ -441,11 +444,9 @@ void joinAndStitch(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
     if(o_B.y != 0)
         B = translateImg(B, o_B.y);
     stitch(A, B, out, o_A.x);
-    //blurTransition(A, B, out, o_A.x);
     A = out(Rect(0, 0, out.cols/2, out.rows));
     B = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
     stitch(B, A, out, o_B.x);
-    //blurTransition(B, A, out, o_B.x);
     correctShift(out);
 } 
 
@@ -455,22 +456,18 @@ void blend(Mat A, Mat B, Mat& out, int x){
     Mat in1, in2, img1, img2;
     Mat blended;
 
-    int overlap = 20;
+    int overlap = 30;
     in1 = A(Rect(A.cols - x/2 - overlap / 2, 0, overlap, A.rows));
     A = A(Rect(0, 0, A.cols - x/2, A.rows));
     B = B(Rect(x/2, 0, B.cols - x/2 ,B.rows));
     hconcat(A, B, in2);
 
     Mat img_all[3];
-    img_all[0] = in2(Rect(0, 0, in2.cols/4*3, in2.rows));
-    img_all[2] = in2(Rect(in2.cols - in2.cols/4*3, 0, in2.cols/4*3, in2.rows));
+    img_all[0] = A(Rect(0, 0, A.cols/4*3, A.rows));
+    img_all[2] = B(Rect(B.cols - B.cols/4*3, 0, B.cols/4*3, B.rows));
     
     in2 = in2(Rect(in2.cols/8*3, 0, in2.cols/4, in2.rows));
 
-    namedWindow("before", WINDOW_NORMAL);
-    resizeWindow("before", 600, 600);
-    imshow("before", in2);
-    
     in1.convertTo(img1, CV_64FC3);
     in2.convertTo(img2, CV_64FC3);
 
@@ -495,15 +492,30 @@ void blend(Mat A, Mat B, Mat& out, int x){
     img_all[1] = in2;
 
     hconcat(img_all, 3, out);
-
-    namedWindow("after", WINDOW_NORMAL);
-    resizeWindow("after", 600, 600);
-    imshow("after", img_all[1]);
-    waitKey();
 }
 
 
-//will it blend?
+void joinAndBlur(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
+    if(o_A.b != 1.00)
+        bundleAdjustment(A, o_A.b);
+    if(o_B.b != 1.00)
+        bundleAdjustment(B, o_B.b);
+    if(o_A.r != 0.00)
+        A = rotateImg(A, o_A.r);
+    if(o_B.r != 0.00)
+        B = rotateImg(B, o_B.r);
+    if(o_A.y != 0)
+        A = translateImg(A, o_A.y);
+    if(o_B.y != 0)
+        B = translateImg(B, o_B.y);
+    blurTransition(A, B, out, o_A.x);
+    A = out(Rect(0, 0, out.cols/2, out.rows));
+    B = out(Rect(out.cols/2, 0, out.cols/2, out.rows));
+    blurTransition(B, A, out, o_B.x);
+    correctShift(out);
+}
+
+
 void joinAndBlend(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out){
     if(o_A.b != 1.00)
         bundleAdjustment(A, o_A.b);

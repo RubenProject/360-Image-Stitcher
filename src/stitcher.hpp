@@ -1,7 +1,7 @@
 #ifndef stitcherHVar  
 #define stitcherHVar
 
-#define TIME_OUT 60
+#define TIME_OUT 300
 #define FIXED_POINTS 4
 
 using namespace std;
@@ -40,5 +40,7 @@ void blurTransition(Mat A, Mat B, Mat& out, int x);
 void joinAndStitch(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out);
 
 void joinAndBlend(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out);
+
+void joinAndBlur(Mat A, Mat B, Orientation o_A, Orientation o_B, Mat& out);
 
 #endif

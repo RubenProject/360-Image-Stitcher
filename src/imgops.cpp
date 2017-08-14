@@ -66,12 +66,12 @@ Mat translateImg(Mat src, int y){
     Mat res;
     if (y < 0){
         src = src(Rect(0, -y, src.cols, src.rows + y));
-        Mat p(-y, src.cols, src.type());
+        Mat p(-y, src.cols, src.type(), Scalar(0,0,0));
         vconcat(src, p, res);
         return res;
     } else if (y > 0) {
         src = src(Rect(0, y, src.cols, src.rows - y));
-        Mat p(y, src.cols, src.type());
+        Mat p(y, src.cols, src.type(), Scalar(0,0,0));
         vconcat(p, src, res);
         return res;
     } else {

@@ -128,7 +128,6 @@ void interactImg(const Mat A, const Mat B, int scale, Orientation& o_A, Orientat
     o_A.y *= scale;
     o_B.x *= scale;
     o_B.y *= scale;
-    return;
 
     ///Initial orientation
     o_A = {.x = 3600/scale, .y = 0,
